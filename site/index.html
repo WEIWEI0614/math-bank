@@ -461,7 +461,7 @@ const STUDENT_PAGES=[["prac","练习"],["weak","薄弱点"],["me","我的数据"
 const TEACHER_PAGES=[["roster","学生一览"],["heat","掌握热力"],["recent","最近作答"]];
 const chOf={}, tOf={}, chName={};
 let UNIT=null, DATA=null, STU=null, CUR=null, CURREP=null, showRaw=false, ADV=null, ADV_N=0;
-let CHSEL=null, SKIPPED=new Set(), SKIPPED_SCOPE=null, SKIPPED_CH=null, SELECTED_TOPIC=null;
+let CHSEL=null;
 const RECENT_ROUND=new Map();
 
 /* ============ 会话 / API ============ */
@@ -738,53 +738,106 @@ function marks(t){const n=STU.n[t]||0; return n>=SHOW_AT?"":(n>=MIN_T?"样本偏
 function pick(n){
   const chapterId=window.__chapterId||null;
   const roundKey=`${UNIT}|${chapterId||""}`;
-  // 每次新轮清空旧跳题；章节/筛选不影响历史作答记录。
-  SKIPPED.clear();
-  SKIPPED_SCOPE=UNIT;
-  SKIPPED_CH=CHSEL;
-  const tp=DATA.topics.filter(t=>t.nq>0&&(!chapterId||chOf[t.id]===chapterId));
+  const topicCount={};
+  DATA.questions.forEach(q=>{topicCount[q[1]]=(topicCount[q[1]]||0)+1});
+  const tp=DATA.topics.filter(t=>(t.nq>0||topicCount[t.id]>0)
+    &&(!chapterId||chOf[t.id]===chapterId));
+
   // 按当前单元隔离完成记录，避免 BMO/ESAT/TMUA 与其它单元相互影响。
   const unitDone=new Set(DATA.questions.map(q=>q[0]));
-  const done=new Set((STU.log||[]).filter(x=>unitDone.has(x.qid)).map(x=>x.qid));
-  const neverSeen = q => !done.has(q.qid);
-  const recent=(RECENT_ROUND.get(roundKey)||[]).filter(qid=>unitDone.has(qid));
-  const recentSet = new Set(recent);
+  const lastRound=RECENT_ROUND.get(roundKey)||[];
+  const lastRoundSet=new Set(lastRound.filter(qid=>unitDone.has(qid)));
+  // 本轮只显示本轮里的题目；重复在一轮内部逐个排除，完成后才回到上一轮补位。
+  const displayIndex=new Map(lastRound.map((qid,index)=>[qid,index]));
+  const lastRoundQids=new Set(lastRound);
+  const freshRoundQids=new Set(DATA.questions.filter(q=>!lastRoundQids.has(q[0])).map(q=>q[0]));
+  const lastRoundIndex=new Map(lastRound.map((qid,index)=>[qid,index]));
+  const roundFallback=new Map();
+  lastRound.filter(qid=>unitDone.has(qid)).map(qBy).filter(Boolean)
+    .forEach(q=>{if(!roundFallback.has(q[1]))roundFallback.set(q[1],q)});
+  const questionByTopic=new Map();
+  DATA.questions.forEach(q=>{if(!questionByTopic.has(q[1]))questionByTopic.set(q[1],q)});
   // 每轮都独占一组 qid，防止前置补漏或多阶段出题重复选中同一道题。
   const chosen=new Set();
   const takeQ=(t)=>{
-    const q=avail(t).find(x=>!chosen.has(x[0]));
+    const candidates=DATA.questions.filter(x=>x[1]===t.id&&!chosen.has(x[0]));
+    const fresh=candidates.filter(x=>freshRoundQids.has(x[0]));
+    const q=(fresh.length?fresh:candidates).sort((a,b)=>
+      (lastRoundIndex.get(a[0])??Number.MAX_SAFE_INTEGER)
+      -(lastRoundIndex.get(b[0])??Number.MAX_SAFE_INTEGER))[0];
     if(!q)return null;
     chosen.add(q[0]);
     return {qid:q[0],topic:t.id,why:"",D:D_of(q[3]),marks:q[2]};
   };
-  const avail=t=>DATA.questions.filter(q=>q[1]===t.id&&neverSeen({qid:q[0]})&&!recentSet.has(q[0])&&!chosen.has(q[0]));
-  const weak=[...tp].filter(t=>avail(t).length).sort((a,b)=>ability(a.id)-ability(b.id)).slice(0,3);
+  const priorityPool=t=>DATA.questions.filter(q=>
+    q[1]===t.id&&!chosen.has(q[0]));
+  const avail=priorityPool;
   const out=[],used=new Set();
+  const pushOut=(item,why)=>{
+    if(out.length>=n||used.has(item.topic)||chosen.has(item.qid))return false;
+    chosen.add(item.qid);
+    used.add(item.topic);
+    item.why=why;
+    out.push(item);
+    return true;
+  };
+  const fallback=[...questionByTopic.entries()]
+    .filter(([topicId])=>tp.some(t=>t.id===topicId))
+    .map(([,q])=>q).filter(q=>!chosen.has(q[0]));
+  const weak=[...tp].filter(t=>avail(t).length||roundFallback.has(t.id)||questionByTopic.has(t.id))
+    .sort((a,b)=>ability(a.id)-ability(b.id)).slice(0,3);
   const take=(pool,cnt,why)=>{
     for(const t of pool){
+      if(out.length>=n)break;
       if(out.filter(o=>o.why===why).length>=cnt)break;
-      if(used.has(t.id))continue;
       const q=takeQ(t);
-      if(!q)continue;
-      q.why=why; out.push(q); used.add(t.id);
+      if(q)pushOut(q,why);
     }
   };
   take(weak,6,"补短板");
   take(tp.filter(t=>!used.has(t.id)),3,"间隔重复");
   take(tp.filter(t=>!used.has(t.id)&&ability(t.id)>1150),2,"拔高");
   take(tp.filter(t=>!used.has(t.id)),9,"补齐");
-  const usedQ=new Set(out.map(o=>o.qid));
+  if(out.length<n){
+    // 上一轮没有该章节时，用当前章内原题补满，避免空白“本轮完成”。
+    if(!lastRoundQids.size){
+      for(const t of tp){
+        if(out.length>=n||used.has(t.id))continue;
+        const candidate=questionByTopic.get(t.id);
+        if(candidate&&!chosen.has(candidate[0]))pushOut({
+          qid:candidate[0],topic:t.id,why:"补齐",
+          D:D_of(candidate[3]),marks:candidate[2]
+        },"补齐");
+      }
+    }
+    for(const t of tp){
+      if(out.length>=n||used.has(t.id))continue;
+      const candidate=roundFallback.get(t.id)||questionByTopic.get(t.id);
+      if(candidate&&!chosen.has(candidate[0]))pushOut({
+        qid:candidate[0],topic:t.id,why:"补齐",
+        D:D_of(candidate[3]),marks:candidate[2]
+      },"补齐");
+    }
+  }
   if(out.length<n){
     const order=[...weak,...tp.filter(t=>!used.has(t.id)),
                  ...tp].filter((v,i,a)=>a.indexOf(v)===i);
     for(const t of order){
       if(out.length>=n)break;
-      for(const q of avail(t)){
+      const fresh=avail(t);
+      for(const q of fresh){
         if(out.length>=n)break;
-        if(chosen.has(q[0]))continue;
-        chosen.add(q[0]);
-        out.push({qid:q[0],topic:t.id,why:"补齐",D:D_of(q[3]),marks:q[2]});
+        pushOut({qid:q[0],topic:t.id,why:"补齐",D:D_of(q[3]),marks:q[2]},"补齐");
       }
+    }
+  }
+  // 小章节先换一批；章内题量少于本轮题数时，再按章内上一轮顺序补满，
+  // 确保“再来一轮”必定能重开而不是留下空页。
+  if(out.length<n){
+    for(const q of fallback){
+      if(out.length>=n)break;
+      if(displayIndex.has(q[0]))continue;
+      pushOut({qid:q[0],topic:q[1],why:"补齐",D:D_of(q[3]),marks:q[2]},"补齐");
     }
   }
   const final=[];
@@ -796,6 +849,12 @@ function pick(n){
     }
     final.push(o);
   }
+  if(!final.length&&tp.length&&questionByTopic.has(tp[0].id)){
+    const q=questionByTopic.get(tp[0].id);
+    final.push({qid:q[0],topic:q[1],why:"补齐",D:D_of(q[3]),marks:q[2]});
+  }
+  final.sort((a,b)=>(displayIndex.get(a.qid)??displayIndex.get(b.qid)+1)
+    -(displayIndex.get(b.qid)??displayIndex.get(a.qid)+1));
   const sliced=final.slice(0,n);
   const unique=sliced.filter((item,index)=>sliced.findIndex(x=>x.qid===item.qid)===index);
   RECENT_ROUND.set(roundKey,unique.map(x=>x.qid));
@@ -922,9 +981,6 @@ $("#chChips").onclick=e=>{
   CHSEL=b.dataset.ch||null;
   window.__chapterId=b.dataset.chid||null;
   CHSEL=b.dataset.ch||null;
-  SKIPPED.clear();
-  SKIPPED_SCOPE=UNIT;
-  SKIPPED_CH=CHSEL;
   renderChips();
   if(STU){ADV=pick(10);stats();renderQ();
     const el=document.getElementById("pracTop"); if(el)el.scrollIntoView({block:"start"});}
@@ -1040,7 +1096,6 @@ function renderQ(){
   };
   $("#skip").onclick=()=>{
     if(CUR){
-      SKIPPED.add(CUR.qid);
       // 跳过后立即从本轮队列移除，下一轮仍保留其“已跳过”状态。
       const idx=ADV.findIndex(x=>x.qid===CUR.qid);
       if(idx>=0)ADV.splice(idx,1);
@@ -1282,7 +1337,7 @@ $("#saveWho").onclick=()=>{
   loadUnit($("#unitSel").value,()=>{ADV=pick(10);stats();renderQ()});
 };
 $("#nameIn").addEventListener("keydown",e=>{if(e.key==="Enter")$("#saveWho").click()});
-  $("#unitSel").onchange=()=>{CHSEL=null;SKIPPED.clear();SKIPPED_SCOPE=null;SKIPPED_CH=null;
+  $("#unitSel").onchange=()=>{CHSEL=null;window.__chapterId=null;
   loadUnit($("#unitSel").value,()=>{if(STU){ADV=pick(10);stats();renderQ();}});};
 window.addEventListener("online",()=>flushQueue());
 
