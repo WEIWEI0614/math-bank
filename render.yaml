@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: math-bank
+    runtime: python
+    plan: free
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: python site/serve.py --port ${PORT}
+    healthCheckPath: /
+    envVars:
+      - key: TEACHER_KEY
+        value: shuxue2026
+      - key: STUDENT_CODE
+        value: banji2026
