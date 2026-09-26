@@ -738,6 +738,8 @@ function marks(t){const n=STU.n[t]||0; return n>=SHOW_AT?"":(n>=MIN_T?"样本偏
 function pick(n){
   const chapterId=window.__chapterId||null;
   const roundKey=`${UNIT}|${chapterId||""}`;
+  const scopeQuestions=DATA.questions.filter(q=>!chapterId||chOf[q[1]]===chapterId);
+  if(scopeQuestions.length)n=scopeQuestions.length;
   const topicCount={};
   DATA.questions.forEach(q=>{topicCount[q[1]]=(topicCount[q[1]]||0)+1});
   const tp=DATA.topics.filter(t=>(t.nq>0||topicCount[t.id]>0)
@@ -766,7 +768,6 @@ function pick(n){
       (lastRoundIndex.get(a[0])??Number.MAX_SAFE_INTEGER)
       -(lastRoundIndex.get(b[0])??Number.MAX_SAFE_INTEGER))[0];
     if(!q)return null;
-    chosen.add(q[0]);
     return {qid:q[0],topic:t.id,why:"",D:D_of(q[3]),marks:q[2]};
   };
   const priorityPool=t=>DATA.questions.filter(q=>
@@ -774,7 +775,7 @@ function pick(n){
   const avail=priorityPool;
   const out=[],used=new Set();
   const pushOut=(item,why)=>{
-    if(out.length>=n||used.has(item.topic)||chosen.has(item.qid))return false;
+    if(out.length>=n||chosen.has(item.qid))return false;
     chosen.add(item.qid);
     used.add(item.topic);
     item.why=why;
@@ -802,7 +803,7 @@ function pick(n){
     // 上一轮没有该章节时，用当前章内原题补满，避免空白“本轮完成”。
     if(!lastRoundQids.size){
       for(const t of tp){
-        if(out.length>=n||used.has(t.id))continue;
+        if(out.length>=n)continue;
         const candidate=questionByTopic.get(t.id);
         if(candidate&&!chosen.has(candidate[0]))pushOut({
           qid:candidate[0],topic:t.id,why:"补齐",
@@ -811,7 +812,7 @@ function pick(n){
       }
     }
     for(const t of tp){
-      if(out.length>=n||used.has(t.id))continue;
+      if(out.length>=n)continue;
       const candidate=roundFallback.get(t.id)||questionByTopic.get(t.id);
       if(candidate&&!chosen.has(candidate[0]))pushOut({
         qid:candidate[0],topic:t.id,why:"补齐",
@@ -857,9 +858,21 @@ function pick(n){
     -(displayIndex.get(b.qid)??displayIndex.get(a.qid)+1));
   const sliced=final.slice(0,n);
   const unique=sliced.filter((item,index)=>sliced.findIndex(x=>x.qid===item.qid)===index);
-  RECENT_ROUND.set(roundKey,unique.map(x=>x.qid));
-  ADV_N=unique.length;
-  return unique;
+  const scopeQids=new Set(scopeQuestions.map(q=>q[0]));
+  const scoped=unique.filter(item=>scopeQids.has(item.qid));
+  const selected=new Set(scoped.map(item=>item.qid));
+  const seenScope=new Set();
+  for(const q of scopeQuestions){
+    if(scoped.length>=n)break;
+    if(seenScope.has(q[0]))continue;
+    seenScope.add(q[0]);
+    if(selected.has(q[0]))continue;
+    scoped.push({qid:q[0],topic:q[1],why:"补齐",D:D_of(q[3]),marks:q[2]});
+    selected.add(q[0]);
+  }
+  RECENT_ROUND.set(roundKey,scoped.map(x=>x.qid));
+  ADV_N=scoped.length;
+  return scoped;
 }
 function qBy(qid){return DATA.questions.find(q=>q[0]===qid)}
 
