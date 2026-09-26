@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1018">
+<meta name="color-scheme" content="dark">
+<title>数学练习台 · 自适应</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+ :root{
+  --bg:#0b1018; --panel:#121a25; --panel2:#172232; --panel3:#202d40;
+  --line:rgba(180,202,232,.12); --line2:rgba(180,202,232,.24);
+  --tx:#f4f7fb; --tx2:#b9c6d8; --tx3:#7f91aa;
+  --amber:#ffbf69; --amber2:#f59f45; --amber-dim:#70451b;
+  --mint:#67e0b4; --blue:#78b8ff; --red:#ff827d; --purple:#aa9aff;
+  --r:18px; --r-s:11px;
+  --shadow:0 24px 70px rgba(0,0,0,.42);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;
+background:
+  radial-gradient(900px 480px at 8% -12%, rgba(104,166,255,.10), transparent 64%),
+  radial-gradient(820px 460px at 94% 0%, rgba(255,184,95,.09), transparent 64%),
+  radial-gradient(700px 500px at 50% 110%, rgba(87,214,176,.05), transparent 60%),
+  var(--bg);
+color:var(--tx);
+font:15px/1.75 system-ui,-apple-system,"PingFang SC","Helvetica Neue",sans-serif;
+-webkit-font-smoothing:antialiased;padding-bottom:90px}
+a{color:var(--blue)}
+button{font-family:inherit}
+:focus-visible{outline:2px solid rgba(255,180,84,.6);outline-offset:2px}
+::selection{background:rgba(255,180,84,.28)}
+
+/* ---------- 顶栏 ---------- */
+.bar{position:sticky;top:0;z-index:30;background:rgba(11,16,24,.82);
+border-bottom:1px solid rgba(180,202,232,.14);backdrop-filter:blur(22px) saturate(1.35);
+box-shadow:0 10px 34px rgba(0,0,0,.18)}
+.bar-in{max-width:940px;margin:0 auto;padding:11px 18px 0}
+.bar-top{display:flex;align-items:center;gap:11px}
+.logo{width:30px;height:30px;border-radius:9px;
+background:linear-gradient(135deg,#ffd18a,#f29b3d);
+display:flex;align-items:center;justify-content:center;
+font-size:15px;font-weight:800;color:#2a1806;flex:0 0 auto;
+box-shadow:0 4px 14px rgba(245,158,45,.28)}
+.ttl{font-size:15.5px;font-weight:700;letter-spacing:.3px}
+.ttl small{font-weight:450;font-size:11.5px;color:var(--tx3);margin-left:8px;letter-spacing:.6px}
+.who{margin-left:auto;display:flex;align-items:center;gap:8px}
+.who-chip{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--tx2);
+background:var(--panel2);border:1px solid var(--line);padding:4px 12px;border-radius:99px;
+max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who-chip .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+.who-chip .dot.s{background:var(--mint)} .who-chip .dot.t{background:var(--amber)}
+.who-chip:empty{display:none}
+#logout{border:1px solid var(--line);background:transparent;color:var(--tx3);
+font-size:12.5px;padding:4px 11px;border-radius:99px;cursor:pointer;transition:.15s}
+#logout:hover{color:var(--red);border-color:rgba(240,128,118,.4)}
+#logout.hide{display:none}
+.tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:10px 0 0}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;border:0;background:none;color:var(--tx2);font:inherit;font-size:13.5px;
+padding:8px 14px 11px;cursor:pointer;white-space:nowrap;
+border-bottom:2px solid transparent;border-radius:0;transition:color .15s}
+.tab:hover{color:var(--tx)}
+.tab.on{color:var(--amber);border-bottom-color:var(--amber);font-weight:650}
+
+main{max-width:1080px;margin:0 auto;padding:26px 22px 54px}
+.pane{display:none;animation:fade .2s ease}
+.pane.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+/* ---------- 卡片 ---------- */
+.card{background:linear-gradient(145deg,rgba(255,255,255,.035),transparent 170px),var(--panel);
+border:1px solid var(--line);border-radius:var(--r);
+padding:20px;margin-bottom:16px;position:relative;transition:border-color .18s}
+.card:hover{border-color:var(--line2)}
+.card.hero{padding:24px;box-shadow:0 16px 44px rgba(0,0,0,.18);border-color:rgba(180,202,232,.17)}
+.lbl{font-size:11px;color:var(--tx3);letter-spacing:.9px;text-transform:uppercase;font-weight:650}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.sep{height:1px;background:var(--line);margin:16px 0}
+.hint{font-size:12.5px;color:var(--tx3);line-height:1.7}
+.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:11px}
+.stat .c{background:linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.01)),var(--panel2);
+border:1px solid var(--line);border-radius:13px;padding:13px 15px;
+transition:border-color .18s}
+.stat .c:hover{border-color:var(--line2)}
+.stat .v{font-size:23px;font-weight:680;font-variant-numeric:tabular-nums;margin-top:3px;letter-spacing:-.4px}
+.pill{display:inline-block;font-size:11.5px;padding:3px 10px;border-radius:99px;
+background:var(--panel2);color:var(--tx2);border:1px solid var(--line);white-space:nowrap}
+.pill.warn{background:rgba(255,180,84,.1);border-color:rgba(255,180,84,.35);color:var(--amber)}
+.pill.good{background:rgba(95,211,166,.1);border-color:rgba(95,211,166,.35);color:var(--mint)}
+.pill.why{background:rgba(169,156,245,.1);border-color:rgba(169,156,245,.35);color:var(--purple)}
+.warnbox{background:rgba(255,180,84,.08);border:1px solid rgba(255,180,84,.3);
+border-radius:12px;padding:12px 14px;font-size:13px;color:var(--amber);margin-bottom:13px}
+
+/* ---------- 控件 ---------- */
+.btn{border:1px solid var(--line2);background:linear-gradient(180deg,rgba(255,255,255,.035),transparent),var(--panel2);color:var(--tx);
+font-size:14px;height:38px;padding:0 16px;border-radius:11px;cursor:pointer;
+transition:.15s;display:inline-flex;align-items:center;gap:7px}
+.btn:hover{border-color:rgba(255,255,255,.3);background:var(--panel3)}
+.btn:active{transform:translateY(1px)}
+.btn.pri{background:linear-gradient(180deg,#ffd18a,#f19b43);border-color:transparent;
+color:#2a1806;font-weight:650;box-shadow:0 6px 18px rgba(245,158,45,.22)}
+.btn.pri:hover{background:linear-gradient(180deg,#ffcb87,#ffab3d)}
+.btn.ok{background:rgba(95,211,166,.12);border-color:rgba(95,211,166,.4);color:var(--mint);font-weight:600}
+.btn.ok:hover{background:rgba(95,211,166,.2)}
+.btn.no{background:rgba(240,128,118,.1);border-color:rgba(240,128,118,.4);color:var(--red);font-weight:600}
+.btn.no:hover{background:rgba(240,128,118,.18)}
+.btn.ghost{background:transparent;border-color:var(--line);color:var(--tx2)}
+.btn.ghost:hover{color:var(--tx);border-color:var(--line2)}
+.btn.danger{background:rgba(240,128,118,.08);border-color:rgba(240,128,118,.3);color:var(--red)}
+select,input[type=text],input[type=password],input:not([type]){
+background:var(--panel2);border:1px solid var(--line2);color:var(--tx);
+font:inherit;font-size:14px;height:38px;padding:0 12px;border-radius:11px;outline:none;transition:.15s}
+select:focus,input:focus{border-color:rgba(255,180,84,.55);box-shadow:0 0 0 3px rgba(255,180,84,.13)}
+input#nameIn{width:150px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{border:1px solid var(--line2);background:var(--panel2);color:var(--tx2);font-size:13px;
+padding:7px 14px;border-radius:99px;cursor:pointer;transition:.15s}
+.chip:hover{border-color:rgba(255,255,255,.3);color:var(--tx)}
+.chip.on{background:rgba(255,180,84,.15);border-color:rgba(255,180,84,.55);
+color:var(--amber);font-weight:600}
+textarea{width:100%;min-height:150px;background:var(--panel2);border:1px solid var(--line2);color:var(--tx);
+font:12px/1.5 ui-monospace,Menlo,monospace;border-radius:11px;padding:12px;outline:none}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--tx3);font-weight:600;font-size:11px;letter-spacing:.7px;text-transform:uppercase}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:rgba(255,255,255,.025)}
+td.num,th.num{font-variant-numeric:tabular-nums;text-align:right}
+
+/* ---------- 题目卡 ---------- */
+.qhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.qstep{font-size:12.5px;color:var(--tx3);font-variant-numeric:tabular-nums}
+.qstep b{color:var(--amber);font-size:14px}
+.pbar{height:5px;background:var(--panel3);border-radius:99px;overflow:hidden;margin:11px 0 15px;
+box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
+.pbar>i{display:block;height:100%;background:linear-gradient(90deg,#78b8ff,var(--amber2),#ffd18a);
+border-radius:99px;transition:width .35s cubic-bezier(.2,.8,.3,1)}
+.qmeta{font-size:12.5px;color:var(--tx3);display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+padding-bottom:13px;border-bottom:1px dashed var(--line)}
+.qmeta b{color:var(--tx2);font-weight:600}
+
+.qfigs{display:flex;flex-direction:column;gap:13px;margin:15px 0 7px}
+.fig{margin:0;background:#fff;border:1px solid rgba(255,255,255,.28);border-radius:13px;padding:7px;
+box-shadow:var(--shadow);position:relative;overflow:hidden}
+.fig img{display:block;max-width:100%;height:auto;border-radius:6px;cursor:zoom-in;background:#fff}
+.fig .figtag{position:absolute;top:11px;right:13px;font-size:10.5px;background:rgba(14,15,18,.8);
+color:#d8d6d0;padding:3px 9px;border-radius:99px;letter-spacing:.5px;pointer-events:none}
+.figcap{font-size:11.5px;color:var(--tx3);margin-top:8px;text-align:center}
+
+details.ocr{margin-top:13px;border:1px solid var(--line);border-radius:12px;
+background:var(--panel2);overflow:hidden}
+details.ocr>summary{cursor:pointer;padding:10px 14px;font-size:12.5px;color:var(--tx2);
+list-style:none;display:flex;align-items:center;gap:7px;user-select:none}
+details.ocr>summary::before{content:"";width:0;height:0;border:5px solid transparent;
+border-left-color:var(--tx3);transition:.15s;margin-right:2px}
+details.ocr[open]>summary{border-bottom:1px solid var(--line);color:var(--tx)}
+details.ocr[open]>summary::before{transform:rotate(90deg)}
+details.ocr .inner{padding:14px 16px}
+.stem{font-size:15.5px;line-height:1.95;white-space:pre-wrap;word-break:break-word}
+.stem.raw{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--tx2)}
+details.ocr .stem{font-size:14px;color:var(--tx2)}
+
+.opts{margin:15px 0 3px;display:flex;flex-direction:column;gap:8px}
+.opts .opt{display:flex;gap:12px;align-items:flex-start;background:var(--panel2);
+border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14.5px;line-height:1.6;
+transition:border-color .15s}
+.opts .opt:hover{border-color:rgba(120,184,255,.5);background:var(--panel3);transform:translateX(3px)}
+.opts .opt b{flex:0 0 22px;height:22px;line-height:22px;text-align:center;border-radius:7px;
+background:rgba(255,180,84,.14);color:var(--amber);font-size:13px;font-weight:700}
+
+.selfrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.selfrow .sepbtn{flex-basis:100%;height:0}
+.selfrow .btn{height:42px;padding:0 20px;font-size:14.5px}
+.rowlbl{font-size:11px;color:var(--tx3);letter-spacing:.9px;text-transform:uppercase;
+font-weight:650;margin-top:18px}
+
+#msbox{margin-top:15px}
+.msfigs{display:flex;flex-direction:column;gap:12px;margin-bottom:10px}
+.ms{background:var(--panel2);border-left:3px solid var(--blue);border-radius:var(--r-s);
+padding:13px 15px;font-size:13px;color:var(--tx2);white-space:pre-wrap;max-height:44vh;overflow:auto;
+font-family:ui-monospace,Menlo,monospace;line-height:1.7}
+.msnote{font-size:11.5px;color:var(--tx3);margin-bottom:10px;display:flex;gap:8px;align-items:center}
+details.msraw{margin-top:11px;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}
+details.msraw>summary{cursor:pointer;padding:10px 14px;font-size:12.5px;color:var(--tx2);list-style:none;user-select:none}
+details.msraw[open]>summary{border-bottom:1px solid var(--line);color:var(--tx)}
+details.msraw .inner{padding:0}
+
+.fb-line{font-size:15.5px;margin:11px 0 7px}
+.fb-line b{font-weight:650}
+.delta.up{color:var(--mint)}.delta.down{color:var(--red)}
+
+/* ---------- 薄弱点 ---------- */
+.bars{display:flex;flex-direction:column;gap:11px}
+.bl{display:grid;grid-template-columns:1fr 64px;gap:11px;align-items:center;font-size:13.5px}
+.bname{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
+.bwrap{position:relative;height:15px;background:var(--panel3);border-radius:6px;overflow:hidden;
+box-shadow:inset 0 1px 3px rgba(0,0,0,.35)}
+.bfill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#3fae87,var(--mint));
+border-radius:6px;transition:width .5s cubic-bezier(.2,.8,.3,1)}
+.bfill.w{background:linear-gradient(90deg,#c0554d,var(--red))}
+.bfill.m{background:linear-gradient(90deg,#c9862c,var(--amber))}
+.bfill.uns{background:#4a4a55;opacity:.7}
+.bnum{text-align:right;font-variant-numeric:tabular-nums;color:var(--tx2);font-weight:650}
+
+/* ---------- 灯箱 ---------- */
+#lbox{position:fixed;inset:0;z-index:99;background:rgba(6,7,9,.95);display:none;
+flex-direction:column;backdrop-filter:blur(8px)}
+#lbox.on{display:flex}
+#lbox .lhead{display:flex;align-items:center;gap:12px;padding:13px 17px;color:#cfcdc7;font-size:13px;
+border-bottom:1px solid rgba(255,255,255,.08)}
+#lbox .lhead .sp{flex:1}
+#lbox .lbody{flex:1;overflow:auto;display:flex;justify-content:center;padding:0 14px 14px}
+#lbox .lbody img{max-width:none;max-height:none;flex-shrink:0;width:auto;height:auto;background:#fff;
+border-radius:9px;box-shadow:var(--shadow);cursor:grab}
+#lbox button{border:1px solid rgba(255,255,255,.2);background:var(--panel2);color:#e6e4df;
+font-size:13.5px;height:32px;padding:0 13px;border-radius:9px;cursor:pointer;transition:.15s}
+#lbox button:hover{border-color:rgba(255,255,255,.45)}
+#lbox .lnav{display:flex;gap:8px;align-items:center}
+
+/* ---------- 登录弹窗 ---------- */
+.ovl{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;
+background:radial-gradient(700px 360px at 50% 0%,rgba(255,191,105,.10),transparent 70%),rgba(4,8,14,.78);
+backdrop-filter:blur(20px);padding:20px;animation:fade .2s ease}
+.ovl.hide{display:none}
+.login{width:min(440px,94vw);background:linear-gradient(160deg,rgba(120,184,255,.10),transparent 35%),var(--panel);
+border:1px solid rgba(180,202,232,.24);border-radius:24px;padding:34px 32px 26px;box-shadow:0 30px 90px rgba(0,0,0,.55);
+animation:pop .28s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes pop{from{opacity:0;transform:scale(.94) translateY(10px)}to{opacity:1;transform:none}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+.login.shake{animation:shake .35s}
+.login .lg-logo{width:54px;height:54px;border-radius:16px;margin:0 auto 15px;
+background:linear-gradient(135deg,#ffd18a,#ed9639);
+display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:#2a1806;
+box-shadow:0 8px 24px rgba(245,158,45,.3)}
+.login h1{font-size:19px;text-align:center;margin:0 0 3px;letter-spacing:.4px}
+.login .sub{text-align:center;font-size:12.5px;color:var(--tx3);margin:0 0 20px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--panel2);
+border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:18px}
+.seg button{border:0;background:transparent;color:var(--tx2);font-size:14px;height:36px;
+border-radius:9px;cursor:pointer;transition:.18s}
+.seg button.on{background:linear-gradient(180deg,rgba(255,191,105,.25),rgba(255,191,105,.13));
+color:var(--amber);font-weight:650;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.fld{margin-bottom:13px}
+.fld label{display:block;font-size:11px;color:var(--tx3);letter-spacing:.8px;
+text-transform:uppercase;font-weight:650;margin-bottom:6px}
+.fld input{width:100%}
+.lg-err{min-height:20px;font-size:13px;color:var(--red);text-align:center;margin:2px 0 8px}
+.btn.full{width:100%;justify-content:center;height:42px;font-size:15px}
+.login .foot{font-size:11.5px;color:var(--tx3);text-align:center;margin-top:16px;line-height:1.7}
+.login-head{display:flex;align-items:center;gap:13px;margin-bottom:20px}
+.login-head .lg-logo{margin:0}
+.login-head h1{font-size:22px;letter-spacing:-.3px;margin:0}
+.login-head .sub{margin:2px 0 0;text-align:left;font-size:12.5px}
+.login-note{display:flex;gap:9px;align-items:flex-start;background:rgba(103,224,180,.08);
+border:1px solid rgba(103,224,180,.22);border-radius:12px;padding:11px 12px;
+font-size:12px;line-height:1.65;color:var(--tx2);margin-top:14px}
+.login-note b{color:var(--mint);font-weight:700}
+.role-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px}
+.role-card{border:1px solid var(--line);background:var(--panel2);border-radius:13px;
+padding:11px 12px;text-align:left;color:var(--tx2);cursor:pointer;transition:.16s}
+.role-card strong{display:block;font-size:14px;color:var(--tx);margin-bottom:2px}
+.role-card span{font-size:11.5px;color:var(--tx3)}
+.role-card.on{border-color:rgba(255,191,105,.58);background:linear-gradient(145deg,rgba(255,191,105,.16),rgba(255,191,105,.05));
+box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.login-foot-actions{display:flex;justify-content:center;gap:18px;margin-top:13px}
+.login-foot-actions button{border:0;background:none;color:var(--tx3);font-size:12px;cursor:pointer}
+.login-foot-actions button:hover{color:var(--tx)}
+.privacy-strip{display:flex;align-items:center;justify-content:space-between;gap:14px;
+padding:10px 13px;border:1px solid rgba(103,224,180,.18);background:rgba(103,224,180,.055);
+border-radius:13px;color:var(--tx2);font-size:12px}
+.privacy-strip b{color:var(--mint)}
+@media (max-width:600px){
+  .role-cards{grid-template-columns:1fr}
+  .privacy-strip{align-items:flex-start;flex-direction:column}
+}
+
+/* ---------- Toast ---------- */
+#toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(20px);
+background:var(--panel3);border:1px solid var(--line2);color:var(--tx);font-size:13.5px;
+padding:11px 20px;border-radius:99px;box-shadow:var(--shadow);opacity:0;pointer-events:none;
+transition:.25s;z-index:120;max-width:86vw;text-align:center}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.hide{display:none}
+@media (max-width:600px){
+  main{padding:18px 13px 44px}
+  .card{padding:16px}
+  .stat{grid-template-columns:repeat(2,1fr)}
+  .bar-in{padding:10px 12px 0}
+  .ttl small{display:none}
+  .selfrow .btn{flex:1;min-width:44%}
+}
+</style>
+</head>
+<body>
+<div class="bar"><div class="bar-in">
+  <div class="bar-top">
+    <div class="logo">∑</div>
+    <div class="ttl">数学练习台<small>Edexcel · CIE · UKMT 自适应</small></div>
+    <div class="who">
+      <div class="who-chip" id="who"></div>
+      <button id="logout" class="hide">退出</button>
+    </div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+</div></div>
+
+<main>
+  <!-- 练习 -->
+  <section class="pane on" data-p="prac">
+    <div id="pracTop" class="card hero">
+      <div class="lbl" style="margin-bottom:11px">开始练习 <span class="pill good" id="storageBadge">本地实时记录</span></div>
+      <div class="row">
+        <select id="unitSel"></select>
+        <input id="nameIn" type="text" placeholder="学生姓名">
+        <button class="btn pri" id="saveWho">开始</button>
+      </div>
+      <div class="sep"></div>
+      <div class="lbl" style="margin-bottom:8px">按章节练习</div>
+      <div class="chips" id="chChips"></div>
+      <div class="sep"></div>
+      <div class="stat" id="statBox"></div>
+      <div class="privacy-strip" id="loadHint" style="margin-top:11px"><span>正在加载题库…</span><b>学生数据仅在本人端可见</b></div>
+    </div>
+    <div id="qbox"></div>
+  </section>
+
+  <!-- 薄弱点（学生） -->
+  <section class="pane" data-p="weak">
+    <div class="card">
+      <div class="lbl">薄弱点（Elo 能力分）</div>
+      <div class="hint" style="margin:8px 0 14px">分数越高越强。作答少于 15 次只显示「样本不足/偏少」——
+        少于 15 次的能力分不可信，不是你弱，而是还没有数据。</div>
+      <div class="bars" id="weakBars"></div>
+    </div>
+    <div class="card"><div class="lbl" style="margin-bottom:10px">下一步建议</div><div id="advice"></div></div>
+  </section>
+
+  <!-- 我的数据（学生） -->
+  <section class="pane" data-p="me">
+    <div class="card">
+      <div class="lbl">我的作答档案 <span class="pill good">本机实时保存</span></div>
+      <div class="hint" style="margin:8px 0 13px" id="meHint">作答实时上报服务器，本机同时保留副本；断网时进入队列，恢复后自动补传。</div>
+      <div class="stat" id="meStat"></div>
+      <div class="sep"></div>
+      <div class="row">
+        <button class="btn" id="meExport">导出我的 JSON</button>
+        <button class="btn" id="meSync">立即同步</button>
+        <button class="btn ghost" id="meImport">导入 JSON</button>
+        <button class="btn danger" id="meClear">清空本机副本</button>
+      </div>
+      <textarea id="ioBox" style="margin-top:12px" placeholder="导出结果出现在这里；导入时把 JSON 粘进来再点「导入 JSON」"></textarea>
+    </div>
+  </section>
+
+  <!-- 学生一览（教师） -->
+  <section class="pane" data-p="roster">
+    <div class="card">
+      <div class="lbl">学生一览 <span class="pill warn">仅教师可见</span></div>
+      <div style="overflow:auto;margin-top:12px"><table id="stuTable"></table></div>
+      <div class="row" style="margin-top:15px">
+        <button class="btn" id="expAll">导出全部数据 (JSON)</button>
+        <button class="btn" id="paper">生成薄弱点专项练习 (HTML)</button>
+        <button class="btn ghost" id="refreshRoster">刷新</button>
+      </div>
+      <div class="hint" style="margin-top:11px">数据存服务器数据库；本机可用 <b>mirror.py</b> 实时镜像，重新发布不会丢作答。</div>
+      <div class="sep"></div>
+      <div class="lbl">引擎参数（与 engine.py 一致）</div>
+      <table style="margin-top:10px">
+        <tr><th>项</th><th>值</th></tr>
+        <tr><td>初始能力</td><td>1000</td></tr>
+        <tr><td>学生 K</td><td>32 起步，每题 −2，下限 12</td></tr>
+        <tr><td>题目难度初值</td><td>800 + 800 × (1 − difficulty_p)</td></tr>
+        <tr><td>收缩阈值</td><td>某知识点作答 &lt; 3 时向所属章均值收缩 50%</td></tr>
+        <tr><td>可信展示阈值</td><td>作答 ≥ 15 次才显示能力分</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- 热力图（教师） -->
+  <section class="pane" data-p="heat">
+    <div class="card">
+      <div class="lbl">知识点 × 学生 掌握度热力</div>
+      <div id="heat" style="margin-top:12px"></div>
+    </div>
+  </section>
+
+  <!-- 最近作答（教师） -->
+  <section class="pane" data-p="recent">
+    <div class="card">
+      <div class="lbl">最近作答（服务器实时流）</div>
+      <div style="overflow:auto;margin-top:12px"><table id="recentTable"></table></div>
+      <div class="row" style="margin-top:13px">
+        <button class="btn ghost" id="refreshRecent">刷新</button>
+        <span class="hint" id="syncInfo"></span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- 登录弹窗 -->
+<div id="ovl" class="ovl hide">
+  <div class="login" id="loginCard">
+    <div class="login-head">
+      <div class="lg-logo">∑</div>
+      <div><h1>欢迎回来</h1><p class="sub">选择身份，进入你的练习空间</p></div>
+    </div>
+    <div class="role-cards">
+      <button data-r="student" class="role-card on"><strong>学生</strong><span>练习 · 查看自己的成长</span></button>
+      <button data-r="teacher" class="role-card"><strong>教师</strong><span>查看学生数据 · 生成练习</span></button>
+    </div>
+    <div id="fStudent">
+      <div class="fld"><label>姓名</label><input id="lgName" type="text" autocomplete="username" placeholder="你的姓名"></div>
+      <div class="fld"><label>班级码</label><input id="lgPass" type="password" autocomplete="current-password" placeholder="任课老师提供"></div>
+    </div>
+    <div id="fTeacher" class="hide">
+      <div class="fld"><label>教师口令</label><input id="lgTPass" type="password" autocomplete="current-password" placeholder="教师口令"></div>
+    </div>
+    <div class="lg-err" id="lgErr"></div>
+    <button class="btn pri full" id="lgGo">进入</button>
+    <div class="login-note"><b>●</b><span><b>数据隔离已开启</b><br>学生只看到自己的作答；学生之间与教师数据相互隔离。</span></div>
+    <div class="login-foot-actions">
+      <button type="button" id="offlineMode">离线练习</button>
+      <button type="button" id="switchRole">切换身份</button>
+    </div>
+  </div>
+</div>
+
+<!-- 图片灯箱 -->
+<div id="lbox">
+  <div class="lhead">
+    <span id="ltitle"></span><span class="sp"></span>
+    <div class="lnav">
+      <button id="lzout" title="缩小">−</button>
+      <span id="lz" style="min-width:46px;text-align:center;align-self:center;color:#cfcdc7;font-size:13px">100%</span>
+      <button id="lzin" title="放大">＋</button>
+      <button id="lz1" title="回到原始像素">1:1</button>
+      <button id="lprev">← 上一张</button>
+      <button id="lnext">下一张 →</button>
+      <button id="lclose">关闭 ESC</button>
+    </div>
+  </div>
+  <div class="lbody" id="lbody"></div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script src="data/index.js"></script>
+<script>
+(function(){
+"use strict";
+const ERRS=[["concept","概念不清"],["procedure","步骤方法错"],["setup","建模列式错"],
+  ["algebra","代数运算失误"],["calc","计算抄写失误"],["time","没做完"],["misread","看错题"]];
+const INIT=1000,K_HI=32,K_LO=12,MIN_T=3,SHOW_AT=15,SHRINK=0.5;
+const STUDENT_PAGES=[["prac","练习"],["weak","薄弱点"],["me","我的数据"]];
+const TEACHER_PAGES=[["roster","学生一览"],["heat","掌握热力"],["recent","最近作答"]];
+const chOf={}, tOf={}, chName={};
+let UNIT=null, DATA=null, STU=null, CUR=null, CURREP=null, showRaw=false, ADV=null, ADV_N=0;
+let CHSEL=null, SKIPPED=new Set(), SKIPPED_SCOPE=null, SKIPPED_CH=null, SELECTED_TOPIC=null;
+const RECENT_ROUND=new Map();
+
+/* ============ 会话 / API ============ */
+const API={tok:localStorage.getItem("mathbank:token")||"", role:null, name:null,
+           online:false, mode:"local", forceLogin:false};   // mode: local(file://离线) | server
+const $=s=>document.querySelector(s);
+const key=n=>"mathbank:"+n;
+function load(n){try{return JSON.parse(localStorage.getItem(key(n))||"null")}catch(e){return null}}
+function save(n,v){localStorage.setItem(key(n),JSON.stringify(v))}
+function saveStu(){if(STU)save(STU.name,STU)}
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("on");
+  clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),2600)}
+function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function cleanTopic(s){return (s||"")
+  .replace(/\$[^$\n]{1,80}\$/g,m=>m.replace(/\$/g,"").trim())
+  .replace(/\\[A-Za-z]+/g,"")
+  .replace(/\s+/g," ").trim()}
+function sourceText(src){
+  if(!src)return"";
+  const year=src.year?String(src.year):"";
+  const session=src.session_cn||src.session||"";
+  const paper=src.paper?`Paper ${src.paper}`:"";
+  const qno=src.qno?`第 ${src.qno} 题`:"";
+  return [year,session,paper,qno].filter(Boolean).join(" · ");
+}
+const RESERVED=new Set(["current","lastUnit","token","switchRole"]);
+function allNames(){const o=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);
+  if(!k.startsWith("mathbank:"))continue;const n=k.slice(9);
+  if(RESERVED.has(n)||n==="queue"||n==="queue:dead")continue;
+  const v=load(n);if(!v||typeof v!=="object"||!v.created)continue;o.push(n)}return o.sort()}
+function D_of(p){return 800+800*(1-p)}
+function E(a,d){return 1/(1+Math.pow(10,(d-a)/400))}
+function newAid(){try{return crypto.randomUUID().replace(/-/g,"")}catch(e){
+  return Array.from({length:32},()=>("0123456789abcdef"[Math.random()*16|0])).join("")}}
+
+async function api(path,opts){
+  const o=opts||{};const h=Object.assign({"Content-Type":"application/json"},o.headers||{});
+  if(API.tok)h["Authorization"]="Bearer "+API.tok;
+  const r=await fetch(path,{method:o.method||"GET",headers:h,body:o.body});
+  if(r.status===401){API.tok="";localStorage.removeItem("mathbank:token");
+    openLogin("登录已过期，请重新登录");throw new Error("401")}
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){const e=new Error(d.err||("HTTP "+r.status));e.status=r.status;throw e}
+  return d;
+}
+
+/* ---- 同步队列：作答先入队，发送成功出队（幂等 aid） ---- */
+function queue(){try{return JSON.parse(localStorage.getItem("mathbank:queue")||"[]")}catch(e){return[]}}
+function queueSet(q){localStorage.setItem("mathbank:queue",JSON.stringify(q))}
+function enqueue(body){const q=queue();q.push(body);queueSet(q);flushQueue()}
+async function flushQueue(){
+  const q=queue();
+  while(q.length&&API.role==="student"&&API.tok){
+    const it=q[0];
+    try{
+      const r=await fetch("/api/attempt",{method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+API.tok},
+        body:JSON.stringify(it)});
+      if(r.status===401){API.tok="";localStorage.removeItem("mathbank:token");
+        openLogin("登录已过期，请重新登录");return}
+      if(r.ok){q.shift();queueSet(q);continue}
+      it.__f=(it.__f||0)+1;
+      if(it.__f>3){q.shift();const dl=load("queue:dead")||[];dl.push(it);save("queue:dead",dl)}
+      else q[0]=it;
+      queueSet(q);return;                    // 服务端拒绝：退避，稍后重试
+    }catch(e){return}                        // 断网：保留在队列
+  }
+}
+
+/* ---- 服务端档案 <-> 本地 STU 合并（服务端权威 + 本地未同步补算） ---- */
+function parseTs(s){const t=Date.parse(String(s).replace(" ","T")+"Z");return isNaN(t)?0:t}
+function buildStu(d,extra){
+  const stu={name:d.name,created:(STU&&STU.name===d.name&&STU.created)||Date.now(),
+             elo:{},n:{},errs:[],log:[]};
+  for(const a of (d.ability||[])){stu.elo[a.topic]=a.elo;stu.n[a.topic]=a.n}
+  const srv=(d.log||[]).map(x=>({aid:x.aid,qid:x.qid,topic:x.topic,score:x.score,
+     secs:x.secs,err:x.err,why:x.why||"",ts:parseTs(x.ts)}));
+  for(const x of srv)if(x.err)stu.errs.push(x.err);
+  const byAid={};srv.forEach(x=>{if(x.aid)byAid[x.aid]=x});
+  const used=new Set();const add=[];const local=extra||[];
+  for(const l of (extra||[])){
+    if(l.aid&&byAid[l.aid])continue;                    // 已同步
+    if(!l.aid){                                          // 旧格式：模糊去重
+      const m=srv.find(s=>!used.has(s)&&s.qid===l.qid&&s.score===l.score&&
+                        Math.abs(s.ts-(l.ts||0))<180000);
+      if(m){used.add(m);continue}}
+    add.push(l);
+  }
+  const merged=srv.concat(add).sort((a,b)=>a.ts-b.ts);
+  // 本地先写入、再同步：保留所有尚未上报的作答，避免更新或同步时丢数据。
+  stu.log=merged;
+  // 仅重放「服务端还没有」的本地条目（服务端 ability 已是权威）
+  const prev=STU;STU=stu;
+  // 从零重放服务端 + 尚未同步的本地作答，保持客户端与服务端能力分一致。
+  merged.slice().sort((a,b)=>a.ts-b.ts).forEach(e=>{
+    if(!e.topic)return;
+    const D=e.D||D_of(0.5);
+    upd(e.topic,D,e.score,e.secs);
+    if(e.err)stu.errs.push(e.err);
+  });
+  STU=prev;
+  return stu;
+}
+async function syncFromServer(){
+  if(API.role!=="student"||!API.tok)return;
+  await flushQueue();
+  if(queue().length)return;                 // 还有没发出去的：先以本地为准，别覆盖
+  try{
+    const d=await api("/api/export?name="+encodeURIComponent(API.name));
+    // 以服务端为主，但保留本地尚未同步的日志；后面再由队列补传。
+    STU=buildStu(d,(STU&&STU.name===API.name)?(STU.log||[]):[]);
+    saveStu();
+    $("#who").innerHTML=`<span class="dot s"></span>${esc(API.name)}`;
+  }catch(e){/* 拉不到就继续用本地 */}
+}
+
+/* ============ 身份：登录弹窗 ============ */
+let LG_ROLE="student";
+function openLogin(msg){
+  $("#ovl").classList.remove("hide");
+  $("#lgErr").textContent=msg||"";
+  setTimeout(()=>{(LG_ROLE==="student"?$("#lgName"):$("#lgTPass")).focus()},80);
+}
+function closeLogin(){$("#ovl").classList.add("hide")}
+function setRole(r){
+  LG_ROLE=r;
+  document.querySelectorAll(".role-card").forEach(b=>b.classList.toggle("on",b.dataset.r===r));
+  $("#fStudent").classList.toggle("hide",r!=="student");
+  $("#fTeacher").classList.toggle("hide",r!=="teacher");
+  $("#lgErr").textContent="";
+}
+document.querySelectorAll(".role-card").forEach(b=>b.onclick=()=>setRole(b.dataset.r));
+async function doLogin(){
+  const body=LG_ROLE==="teacher"?{role:"teacher",pass:$("#lgTPass").value}
+    :{role:"student",name:$("#lgName").value.trim(),pass:$("#lgPass").value};
+  if(LG_ROLE==="student"&&!body.name){lgFail("填写姓名");return}
+  try{
+    const r=await fetch("/api/login",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){lgFail(d.err||"登录失败");return}
+    API.tok=d.token;API.role=d.role;API.name=d.name;API.online=true;API.mode="server";
+    localStorage.setItem("mathbank:token",d.token);
+    if(d.role==="student")localStorage.setItem("mathbank:current",d.name);
+    closeLogin();
+    enterRole();
+  }catch(e){lgFail("网络不通，稍后重试")}
+}
+function lgFail(m){const c=$("#loginCard");$("#lgErr").textContent=m;
+  c.classList.remove("shake");void c.offsetWidth;c.classList.add("shake")}
+$("#lgGo").onclick=doLogin;
+$("#offlineMode").onclick=()=>{API.forceLogin=false;closeLogin();enterLocal()};
+[$("#lgName"),$("#lgPass"),$("#lgTPass")].forEach(el=>
+  el.addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()}));
+$("#logout").onclick=async()=>{
+  try{await fetch("/api/logout",{method:"POST",
+    headers:{"Authorization":"Bearer "+API.tok}})}catch(e){}
+  API.tok="";API.role=null;API.name=null;API.forceLogin=true;
+  localStorage.removeItem("mathbank:token");
+  STU=null;location.reload();
+};
+
+$("#switchRole").onclick=()=>{
+  setRole(LG_ROLE==="student"?"teacher":"student");
+  localStorage.setItem("mathbank:switchRole","1");
+  API.forceLogin=true;
+  API.tok="";API.role=null;API.name=null;
+  localStorage.removeItem("mathbank:token");
+  closeLogin();
+  openLogin();
+};
+
+function tabsFor(pages){
+  $("#tabs").innerHTML=pages.map(([k,n],i)=>
+    `<button class="tab${i?"":" on"}" data-p="${k}">${n}</button>`).join("");
+  $("#tabs").onclick=e=>{const b=e.target.closest(".tab");if(!b)return;
+    document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===b));
+    document.querySelectorAll(".pane").forEach(p=>{
+      const show=p.dataset.p===b.dataset.p;
+      p.classList.toggle("on",show);
+    if(show)onPane(p.dataset.p);
+    });
+    if(b.dataset.p==="prac"&&STU&&DATA)renderQ();};
+  // 不在页签里的 pane 直接从 DOM 隐藏（学生端看不到教师面板），
+  // 并把第一个页签对应的 pane 置为可见
+  document.querySelectorAll(".pane").forEach(p=>{
+    const inPages=pages.some(([k])=>k===p.dataset.p);
+    p.classList.toggle("hide",!inPages);
+    p.classList.toggle("on",inPages&&p.dataset.p===pages[0][0]);
+  });
+  // 学生端不挂载教师端入口，避免角色间通过 DOM 或事件读取教师数据。
+  const studentOnly=pages.some(([k])=>k==="prac"||k==="weak"||k==="me");
+  const teacherOnly=pages.some(([k])=>k==="roster"||k==="heat"||k==="recent");
+  document.querySelectorAll(".pane[data-p='roster'],.pane[data-p='heat'],.pane[data-p='recent']").forEach(p=>{
+    if(!teacherOnly){p.classList.add("hide");p.classList.remove("on");}
+  });
+  document.querySelectorAll(".pane[data-p='prac'],.pane[data-p='weak'],.pane[data-p='me']").forEach(p=>{
+    if(!studentOnly){p.classList.add("hide");p.classList.remove("on");}
+  });
+}
+function onPane(p){
+  if(API.role==="teacher"){
+    if(p==="roster")renderRoster();
+    if(p==="heat")renderHeat();
+    if(p==="recent")renderRecent();
+    return;
+  }
+  if(API.role==="student"||API.role==="local"){
+    if(p==="weak")renderWeak();
+    if(p==="me")renderMe();
+  }
+}
+
+/* ============ 角色进场 ============ */
+function enterRole(){
+  $("#logout").classList.remove("hide");
+  if(API.role==="teacher"){
+    $("#who").innerHTML=`<span class="dot t"></span>教师`;
+    tabsFor(TEACHER_PAGES);
+    units();
+    $("#nameIn").classList.add("hide");$("#saveWho").classList.add("hide");
+    $("#storageBadge").textContent="教师端";
+    renderRoster();
+    return;
+  }
+  // 学生
+  $("#who").innerHTML=`<span class="dot s"></span>${esc(API.name||"")}`;
+  tabsFor(STUDENT_PAGES);
+  $("#nameIn").classList.add("hide");$("#saveWho").classList.add("hide");
+  $("#storageBadge").textContent="本地实时记录";
+  const loc=load(API.name);
+  STU=loc&&loc.created?loc:newStu(API.name);
+  STU.errs=STU.errs||[];
+  units();
+  loadUnit($("#unitSel").value,()=>{
+    syncFromServer().then(()=>{ADV=pick(10);stats();renderQ()});
+  });
+}
+function enterLocal(){
+  API.mode="local";API.role="local";
+  tabsFor(STUDENT_PAGES);
+  document.querySelector('[data-p="me"]').classList.remove("hide");
+  units();
+  $("#storageBadge").textContent="本地实时记录";
+  loadUnit($("#unitSel").value,()=>{
+    const cur=localStorage.getItem("mathbank:current");
+    if(cur){$("#nameIn").value=cur;STU=load(cur)||newStu(cur);STU.errs=STU.errs||[];
+      $("#who").textContent=cur;ADV=pick(10);stats();renderQ();}
+    else{stats();renderQ();}
+  });
+}
+
+/* ============ 引擎（与 serve.py / engine.py 一致） ============ */
+function newStu(name){return {name:name,created:Date.now(),elo:{},n:{},errs:[],log:[]}}
+function rating(t){if(!STU)return INIT;return STU.elo[t]!==undefined?STU.elo[t]:INIT}
+function ability(t){
+  const n=STU.n[t]||0;
+  if(n>=MIN_T)return rating(t);
+  const ch=chOf[t], sibs=Object.keys(chOf).filter(x=>chOf[x]===ch);
+  const pool=sibs.filter(x=>(STU.n[x]||0)>=MIN_T).map(x=>[rating(x),STU.n[x]]);
+  if(!pool.length)return rating(t);
+  const w=pool.reduce((s,p)=>s+p[1],0), m=pool.reduce((s,p)=>s+p[0]*p[1],0)/w;
+  return n? SHRINK*rating(t)+(1-SHRINK)*m : m;
+}
+function upd(t,D,s,secs){
+  let sc=s;
+  if(s===1&&secs>120)sc=0.7;
+  const a=rating(t), k=Math.max(K_LO,K_HI-(STU.n[t]||0)*2);
+  STU.elo[t]=a+k*(sc-E(a,D)); STU.n[t]=(STU.n[t]||0)+1;
+}
+function marks(t){const n=STU.n[t]||0; return n>=SHOW_AT?"":(n>=MIN_T?"样本偏少":"样本不足")}
+
+/* ---------- 选题：60% 补短板 / 25% 间隔重复 / 15% 拔高 ---------- */
+function pick(n){
+  const chapterId=window.__chapterId||null;
+  const roundKey=`${UNIT}|${chapterId||""}`;
+  // 每次新轮清空旧跳题；章节/筛选不影响历史作答记录。
+  SKIPPED.clear();
+  SKIPPED_SCOPE=UNIT;
+  SKIPPED_CH=CHSEL;
+  const tp=DATA.topics.filter(t=>t.nq>0&&(!chapterId||chOf[t.id]===chapterId));
+  // 按当前单元隔离完成记录，避免 BMO/ESAT/TMUA 与其它单元相互影响。
+  const unitDone=new Set(DATA.questions.map(q=>q[0]));
+  const done=new Set((STU.log||[]).filter(x=>unitDone.has(x.qid)).map(x=>x.qid));
+  const neverSeen = q => !done.has(q.qid);
+  const recent=(RECENT_ROUND.get(roundKey)||[]).filter(qid=>unitDone.has(qid));
+  const recentSet = new Set(recent);
+  // 每轮都独占一组 qid，防止前置补漏或多阶段出题重复选中同一道题。
+  const chosen=new Set();
+  const takeQ=(t)=>{
+    const q=avail(t).find(x=>!chosen.has(x[0]));
+    if(!q)return null;
+    chosen.add(q[0]);
+    return {qid:q[0],topic:t.id,why:"",D:D_of(q[3]),marks:q[2]};
+  };
+  const avail=t=>DATA.questions.filter(q=>q[1]===t.id&&neverSeen({qid:q[0]})&&!recentSet.has(q[0])&&!chosen.has(q[0]));
+  const weak=[...tp].filter(t=>avail(t).length).sort((a,b)=>ability(a.id)-ability(b.id)).slice(0,3);
+  const out=[],used=new Set();
+  const take=(pool,cnt,why)=>{
+    for(const t of pool){
+      if(out.filter(o=>o.why===why).length>=cnt)break;
+      if(used.has(t.id))continue;
+      const q=takeQ(t);
+      if(!q)continue;
+      q.why=why; out.push(q); used.add(t.id);
+    }
+  };
+  take(weak,6,"补短板");
+  take(tp.filter(t=>!used.has(t.id)),3,"间隔重复");
+  take(tp.filter(t=>!used.has(t.id)&&ability(t.id)>1150),2,"拔高");
+  take(tp.filter(t=>!used.has(t.id)),9,"补齐");
+  const usedQ=new Set(out.map(o=>o.qid));
+  if(out.length<n){
+    const order=[...weak,...tp.filter(t=>!used.has(t.id)),
+                 ...tp].filter((v,i,a)=>a.indexOf(v)===i);
+    for(const t of order){
+      if(out.length>=n)break;
+      for(const q of avail(t)){
+        if(out.length>=n)break;
+        if(chosen.has(q[0]))continue;
+        chosen.add(q[0]);
+        out.push({qid:q[0],topic:t.id,why:"补齐",D:D_of(q[3]),marks:q[2]});
+      }
+    }
+  }
+  const final=[];
+  for(const o of out){
+    const pre=(DATA.topics.find(t=>t.id===o.topic)||{}).pre||[];
+    if(pre.length&&(STU.n[pre[0]]||0)<MIN_T){
+      const pt=DATA.topics.find(t=>t.id===pre[0]);
+      if(pt){const preQ=takeQ(pt); if(preQ){preQ.why="前置补漏";final.push(preQ);}}
+    }
+    final.push(o);
+  }
+  const sliced=final.slice(0,n);
+  const unique=sliced.filter((item,index)=>sliced.findIndex(x=>x.qid===item.qid)===index);
+  RECENT_ROUND.set(roundKey,unique.map(x=>x.qid));
+  ADV_N=unique.length;
+  return unique;
+}
+function qBy(qid){return DATA.questions.find(q=>q[0]===qid)}
+
+/* ---------- 灯箱 ---------- */
+let LB={list:[],i:0,tag:"",z:1};
+function openLb(list,i,tag){
+  if(!list||!list.length)return;
+  LB={list:list,i:i,tag:tag||"原卷截图",z:1};
+  $("#lbox").classList.add("on"); renderLb();
+}
+function lbApplyZ(){
+  const im=$("#lbody img"); if(!im)return;
+  const nw=im.naturalWidth||im.width;
+  im.style.width=Math.round(nw*LB.z)+"px"; im.style.height="auto";
+  $("#lz").textContent=Math.round(LB.z*100)+"%";
+}
+function lbZoom(f){LB.z=Math.min(8,Math.max(0.2,LB.z*f)); lbApplyZ();}
+function renderLb(){
+  $("#ltitle").textContent=`${LB.tag} ${LB.i+1} / ${LB.list.length}`;
+  $("#lbody").innerHTML=`<img src="data/${LB.list[LB.i]}" alt="">`;
+  const im=$("#lbody img");
+  im.onload=()=>{LB.z=1;lbApplyZ()};
+  if(im.complete&&im.naturalWidth){LB.z=1;lbApplyZ()}
+  $("#lprev").style.display=LB.list.length>1?"":"none";
+  $("#lnext").style.display=LB.list.length>1?"":"none";
+  $("#lbody").scrollTop=0;$("#lbody").scrollLeft=0;
+}
+function lbStep(d){LB.i=(LB.i+d+LB.list.length)%LB.list.length;LB.z=1;renderLb()}
+$("#lclose").onclick=()=>$("#lbox").classList.remove("on");
+$("#lprev").onclick=()=>lbStep(-1);
+$("#lnext").onclick=()=>lbStep(1);
+$("#lzin").onclick=()=>lbZoom(1.4);
+$("#lzout").onclick=()=>lbZoom(1/1.4);
+$("#lz1").onclick=()=>{LB.z=1;lbApplyZ()};
+$("#lbox").onclick=e=>{if(e.target===$("#lbox")||e.target===$("#lbody"))$("#lbox").classList.remove("on")};
+$("#lbody").addEventListener("dblclick",()=>{LB.z=1;lbApplyZ()});
+$("#lbody").addEventListener("wheel",e=>{
+  if(!$("#lbox").classList.contains("on"))return;
+  if(!$("#lbody img"))return;
+  e.preventDefault();lbZoom(e.deltaY<0?1.25:0.8);
+},{passive:false});
+document.addEventListener("keydown",e=>{
+  if(!$("#lbox").classList.contains("on"))return;
+  if(e.key==="Escape")$("#lbox").classList.remove("on");
+  if(e.key==="ArrowLeft")lbStep(-1);
+  if(e.key==="ArrowRight")lbStep(1);
+  if(e.key==="+"||e.key==="=")lbZoom(1.4);
+  if(e.key==="-"||e.key==="_")lbZoom(1/1.4);
+  if(e.key==="0"){LB.z=1;lbApplyZ()}
+});
+function figBlock(files,tag,cap){
+  if(!files||!files.length)return"";
+  return `<div class="qfigs">`+files.map((f,i)=>
+    `<figure class="fig" data-lb="${i}">
+       <img src="data/${f}" loading="lazy" alt="${tag}">
+       <span class="figtag">${tag}</span>
+     </figure>`).join("")+
+    (cap?`<div class="figcap">${cap}</div>`:"")+`</div>`;
+}
+function bindLb(root,files,tag){
+  root.querySelectorAll(".fig").forEach(el=>{
+    el.onclick=()=>openLb(files,parseInt(el.dataset.lb,10)||0,tag);
+  });
+}
+
+/* ---------- 渲染：单元 / 章节 / 统计 ---------- */
+function units(){
+  $("#unitSel").innerHTML=UNIT_INDEX.map(u=>
+    `<option value="${u.code}">${esc(u.name)} · ${u.n}题 / ${u.nt}知识点</option>`).join("");
+  const last=localStorage.getItem("mathbank:lastUnit");
+  if(last&&UNIT_INDEX.some(u=>u.code===last))$("#unitSel").value=last;
+  if(!$("#unitSel").value && UNIT_INDEX.length)$("#unitSel").value=UNIT_INDEX[0].code;
+}
+function loadUnit(code,cb){
+  $("#loadHint").innerHTML="<span>加载中…</span><b>学生数据仅在本人端可见</b>";
+  const f=UNIT_INDEX.find(u=>u.code===code); if(!f)return;
+  const s=document.createElement("script"); s.src="data/"+f.file;
+  s.onload=()=>{DATA=window.UNIT_DATA[code];UNIT=code;
+    for(const k of Object.keys(chOf)) delete chOf[k];
+    for(const k of Object.keys(tOf)) delete tOf[k];
+    for(const k of Object.keys(chName)) delete chName[k];
+    (DATA.chapters||[]).forEach(c=>chName[c.id]=c.name);
+    DATA.topics.forEach(t=>{chOf[t.id]=t.parent;tOf[t.id]=t.name});
+    DATA.topics.forEach(t=>{chName[chOf[t.id]]=chName[t.parent]||t.parent});
+    // 为题目 topic_id 建直接章映射，避免按题号后缀反查章时串到别的单元。
+    const topicToChapter = new Map(DATA.topics.map(t=>[t.id,t.parent]));
+    DATA.questions.forEach(q=>{if(!chOf[q[1]] && topicToChapter.has(q[1])) chOf[q[1]]=topicToChapter.get(q[1]);});
+    localStorage.setItem("mathbank:lastUnit",code);
+    const chapterCount=new Set(DATA.questions.map(q=>chOf[q[1]]).filter(Boolean)).size;
+    $("#loadHint").innerHTML=`<span>共 ${DATA.questions.length} 题 / ${DATA.topics.length} 个知识点${chapterCount?" / "+chapterCount+" 章":""}</span><b>学生数据仅在本人端可见</b>`;
+    renderChips();
+    // 切换单元后重新生成一轮，避免停留在上一轮的“本轮完成”。
+    if(STU){ADV=pick(10);stats();renderQ();}
+    cb&&cb();};
+  s.onerror=()=>{$("#loadHint").innerHTML="<span>加载失败：请用本地 server 打开，或确认 data/ 目录存在</span><b>学生数据仅在本人端可见</b>";};
+  document.head.appendChild(s);
+}
+function renderChips(){
+  if(!DATA){$("#chChips").innerHTML="";return;}
+  const cnt={};
+  DATA.questions.forEach(q=>{const ch=chOf[q[1]];if(ch!=null)cnt[ch]=(cnt[ch]||0)+1});
+  const grouped={};
+  (DATA.chapters||[]).forEach(c=>{const key=c.name||c.id;
+    if(cnt[c.id]){grouped[key]=(grouped[key]||0)+(cnt[c.id]||0);}});
+  Object.entries(chName).forEach(([id,name])=>{if(cnt[id])grouped[name]=(grouped[name]||0)+(cnt[id]||0);});
+  const chs=Object.entries(grouped).map(([name,count])=>({name,count}));
+  const all=DATA.questions.length;
+  $("#chChips").innerHTML=
+    `<button class="chip${CHSEL==null?" on":""}" data-ch="">全部 <span style="opacity:.6">${all}</span></button>`+
+    // 章名可能重复，chip 必须携带章 id；前端此前只按章名反查会串章。
+    (DATA.chapters||[]).filter(c=>cnt[c.id]).map(c=>({
+      id:c.id, name:c.name||c.id, count:cnt[c.id]
+    })).map(c=>`<button class="chip${window.__chapterId===c.id?" on":""}" data-ch="${esc(c.name)}" data-chid="${esc(c.id)}">${esc(c.name)} <span style="opacity:.6">${c.count}</span></button>`).join("");
+  const loadHint=$("#loadHint");
+  if(loadHint)loadHint.innerHTML=`<span>共 ${DATA.questions.length} 题 / ${DATA.topics.length} 个知识点${chs.length?" / "+chs.length+" 章":""}</span><b>学生数据仅在本人端可见</b>`;
+}
+$("#chChips").onclick=e=>{
+  const b=e.target.closest(".chip"); if(!b||!DATA)return;
+  CHSEL=b.dataset.ch||null;
+  window.__chapterId=b.dataset.chid||null;
+  CHSEL=b.dataset.ch||null;
+  SKIPPED.clear();
+  SKIPPED_SCOPE=UNIT;
+  SKIPPED_CH=CHSEL;
+  renderChips();
+  if(STU){ADV=pick(10);stats();renderQ();
+    const el=document.getElementById("pracTop"); if(el)el.scrollIntoView({block:"start"});}
+};
+function stats(){
+  const lg=(STU&&STU.log)||[];
+  if(!STU||!lg.length){
+    $("#statBox").innerHTML=`<div class="c" style="grid-column:1/-1;text-align:center">
+      <div class="hint" style="margin:0">${STU?"已开始，答题后这里显示学习统计。":"填入姓名点「开始」，这里会显示今日题数、累计、正确率与主要错因。"}</div></div>`;
+    return;
+  }
+  const today=new Date().toDateString();
+  const doneToday=lg.filter(x=>new Date(x.ts).toDateString()===today).length;
+  const acc=Math.round(100*lg.reduce((s,x)=>s+x.score,0)/lg.length);
+  const ec={}; (STU.errs||[]).forEach(e=>ec[e]=(ec[e]||0)+1);
+  const topErr=Object.entries(ec).sort((a,b)=>b[1]-a[1])[0];
+  $("#statBox").innerHTML=`
+    <div class="c"><div class="lbl">今日题数</div><div class="v">${doneToday}</div></div>
+    <div class="c"><div class="lbl">累计</div><div class="v">${lg.length}</div></div>
+    <div class="c"><div class="lbl">正确率</div><div class="v">${acc}%</div></div>
+    <div class="c"><div class="lbl">主要错因</div><div class="v" style="font-size:15px">${
+      topErr?(ERRS.find(e=>e[0]===topErr[0])||[0,topErr[0]])[1]:"—"}</div></div>`;
+  const badge=$("#storageBadge");
+  if(badge)badge.textContent=`已保存 ${lg.length} 条`;
+}
+function optBlock(q){
+  if(!q[7])return"";
+  return `<div class="opts">${Object.entries(q[7]).map(([k,v])=>
+    `<div class="opt"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join("")}</div>`;
+}
+
+/* ---------- 题目渲染 / 作答 ---------- */
+function renderQ(){
+  if(!STU||!DATA){$("#qbox").innerHTML=`<div class="card hint">先选单元、${API.mode==="local"?"填学生姓名点「开始」":"登录后自动开始"}。</div>`;return;}
+  const rec=ADV&&ADV.length?ADV[0]:null;
+  if(!rec){$("#qbox").innerHTML=`<div class="card"><div class="lbl">本轮完成</div>
+    <div class="hint" style="margin-top:9px">${CHSEL?"本章节":"本单元"}可出的题已做完或全部跳过。
+      可以再来一轮、切到别的章节，或去「薄弱点」看结果。</div>
+    <div class="sep"></div>
+    <div class="row">
+      <button class="btn pri" id="again2">跳过本轮 · 换一批 →</button>
+      <button class="btn ghost" id="toWeak2">看薄弱点</button>
+    </div></div>`;
+    $("#again2").onclick=()=>{
+      CUR=null;
+      ADV=pick(10);
+      stats();
+      renderQ();
+      toast(ADV&&ADV.length?"已重新开始本轮":"当前题目已全部作答或跳过，可切换章节");
+    };
+    $("#toWeak2").onclick=()=>document.querySelector('[data-p="weak"]').click();
+    return;}
+  const q=qBy(rec.qid); if(!q){ADV.shift();return renderQ()}
+  CUR={qid:q[0],topic:q[1],D:rec.D,why:rec.why,marks:q[2],t0:Date.now()};
+  CURREP=null;
+  const tn=tOf[q[1]]||q[1], cn=chName[chOf[q[1]]]||"";
+  const step=ADV_N-ADV.length+1, total=ADV_N;
+  const pct=Math.round(step/total*100);
+  const hasImg=q[8]&&q[8].length, hasMs=q[9]&&q[9].length;
+  const topicName=cleanTopic(tOf[q[1]]||q[1]);
+  const source=sourceText(q[10]);
+  const stemBlock = hasImg
+    ? figBlock(q[8],"原卷","点击图片可放大 · 以原卷截图为准")
+    : `<div class="stem${showRaw?" raw":""}" id="stem">${esc(q[5])}</div>${optBlock(q)}`;
+  $("#qbox").innerHTML=`
+  <div class="card">
+    <div class="qhead">
+      <span class="qstep">第 <b>${step}</b> / ${total} 题</span>
+      <span class="pill why">${rec.why}</span>
+      <span class="qmeta" style="border:0;padding:0;margin-left:auto">${rec.marks} 分 · 难度 p=${q[3]}</span>
+    </div>
+    <div class="pbar"><i style="width:${pct}%"></i></div>
+    <div class="qmeta"><b>${esc(cn)}</b><span>·</span><span>${esc(topicName)}</span>
+      ${source?`<span>·</span><span>${esc(source)}</span>`:""}</div>
+    ${stemBlock}
+    <div class="sep"></div>
+    <div class="rowlbl">自评（解答题需自评；选「部分对/做错/没做完」须填错因）</div>
+    <div class="selfrow">
+      <button class="btn ok" data-s="1">✓ 做对了</button>
+      <button class="btn" data-s="0.5">◑ 部分对</button>
+      <button class="btn no" data-s="0">✗ 做错了</button>
+      <button class="btn no" data-s="0">没做完</button>
+    </div>
+    <div class="selfrow">
+      <button class="btn ghost" id="noMs">${hasMs?"看判分细则（截图）":"看判分细则"}</button>
+      <button class="btn ghost" id="skip">跳过本题</button>
+    </div>
+    <div id="cause"></div>
+    <div id="msbox" class="hide"></div>
+  </div>`;
+  renderMath();
+  const qfigs=$("#qbox .qfigs"); if(qfigs)bindLb(qfigs,q[8],"原卷截图");
+  $("#qbox").querySelectorAll("button[data-s]").forEach(b=>b.onclick=()=>{
+    const s=parseFloat(b.dataset.s);
+    if(s<1){ $("#cause").innerHTML=`<div class="rowlbl">错因（必填）</div>
+      <div class="chips">${ERRS.map(e=>`<button class="chip" data-e="${e[0]}">${e[1]}</button>`).join("")}</div>`;
+      $("#cause").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
+        $("#cause").querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===c));
+        CURREP=s; CUR.err=c.dataset.e; commit();});
+    } else {CURREP=s; commit();}
+  });
+  $("#noMs").onclick=()=>{
+    const box=$("#msbox");
+    if(!box.classList.contains("hide")){box.classList.add("hide");return}
+    box.classList.remove("hide");
+    box.innerHTML=`<div class="rowlbl" style="margin-top:0">判分细则</div>
+      ${hasMs?`<div class="msnote">官方判分细则截图 · 点击放大</div>
+        ${figBlock(q[9],"判分细则","")}`
+      :(q[6]?`<div class="ms">${esc(q[6])}</div>`
+        :`<div class="ms">该题无判分细则，请以上方原卷截图为准。</div>`)}`;
+    const mf=box.querySelector(".qfigs"); if(mf)bindLb(mf,q[9],"判分细则截图");
+    if(!hasMs||!q[6])renderMathIn(box);
+  };
+  $("#skip").onclick=()=>{
+    if(CUR){
+      SKIPPED.add(CUR.qid);
+      // 跳过后立即从本轮队列移除，下一轮仍保留其“已跳过”状态。
+      const idx=ADV.findIndex(x=>x.qid===CUR.qid);
+      if(idx>=0)ADV.splice(idx,1);
+      else ADV.shift();
+      CUR=null;
+    } else ADV.shift();
+    renderQ();
+  };
+}
+function renderMathIn(root){
+  if(!window.renderMathInElement)return;
+  try{renderMathInElement(root,{delimiters:[{left:"$$",right:"$$"},{left:"$",right:"$"}],
+    throwOnError:false,ignoredTags:["script","style"],errorColor:"#f08076"});}catch(e){}
+}
+function renderMath(){
+  if(showRaw||!window.renderMathInElement)return;
+  const el=$("#stem"); if(!el)return;
+  try{renderMathInElement(el,{delimiters:[{left:"$$",right:"$$"},{left:"$",right:"$"}],
+    throwOnError:false,ignoredTags:["script","style"],errorColor:"#f08076"});}
+  catch(e){el.textContent=el.textContent}
+}
+function commit(){
+  if(CURREP===null)return;
+  const secs=Math.round((Date.now()-CUR.t0)/1000);
+  STU.log=STU.log||[]; STU.errs=STU.errs||[];
+  const aid=newAid();
+  const entry={aid:aid,qid:CUR.qid,topic:CUR.topic,score:CURREP,secs:secs,
+               why:CUR.why,err:CUR.err||null,ts:Date.now(),D:CUR.D};
+  STU.log.push(entry);
+  const before=rating(CUR.topic);
+  upd(CUR.topic,CUR.D,CURREP,secs);
+  saveStu();
+  // 上报：在线持 token 直发；失败/离线进队列（重发幂等，aid 去重）
+  if(API.mode==="server"&&API.role==="student"){
+    const body={aid:aid,qid:CUR.qid,topic:CUR.topic,score:CURREP,marks:CUR.marks,
+                secs:secs,why:CUR.why,err:CUR.err||null};
+    if(navigator.onLine!==false){
+      fetch("/api/attempt",{method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+API.tok},
+        body:JSON.stringify(body)}).then(r=>{
+          if(r.status===401){API.tok="";localStorage.removeItem("mathbank:token");
+            openLogin("登录已过期，请重新登录");}
+          else if(!r.ok)enqueue(body);
+        }).catch(()=>enqueue(body));
+    } else enqueue(body);
+  }
+  const after=rating(CUR.topic);
+  ADV.shift();
+  const delta=Math.round(after-before);
+  $("#qbox").innerHTML=`<div class="card">
+    <div class="lbl">已记录</div>
+    <div class="fb-line">本题：<b>${CURREP===1?"正确":CURREP===0.5?"部分正确":"错误"}</b>
+      ${CUR.err?` · 错因 <b>${(ERRS.find(e=>e[0]===CUR.err)||[0,CUR.err])[1]}</b>`:""}
+      <span class="pill" style="margin-left:6px">用时 ${secs}s</span></div>
+    <div class="hint">知识点「${esc(cleanTopic(tOf[CUR.topic]||CUR.topic))}」能力分 ${Math.round(before)} →
+      <b class="delta ${delta>=0?"up":"down"}">${Math.round(after)}</b>
+      <span class="delta ${delta>=0?"up":"down"}">(${delta>=0?"+":""}${delta})</span>
+      · 累计 ${STU.n[CUR.topic]} 次作答
+      ${marks(CUR.topic)?`<span class="pill warn" style="margin-left:6px">${marks(CUR.topic)}</span>`:""}
+      ${API.mode==="server"&&queue().length?`<span class="pill warn" style="margin-left:6px">待同步 ${queue().length}</span>`:""}</div>
+    <div class="sep"></div>
+    <div class="row">
+      <button class="btn pri" id="next">下一题 →</button>
+      <button class="btn ghost" id="done">结束本轮</button>
+    </div>
+  </div>`;
+  $("#next").onclick=()=>{$("#qbox").innerHTML=""; renderQ();
+    const el=document.getElementById("pracTop"); if(el)el.scrollIntoView({block:"start"});};
+  $("#done").onclick=()=>{ADV=[];stats();Q_end()};
+  stats();
+}
+function Q_end(){
+  const lg=(STU.log||[]).slice(-10);
+  const ok=lg.filter(x=>x.score===1).length;
+  $("#qbox").innerHTML=`<div class="card">
+    <div class="lbl">本轮小结</div>
+    <div class="stat" style="margin-top:12px">
+      <div class="c"><div class="lbl">本轮题数</div><div class="v">${lg.length}</div></div>
+      <div class="c"><div class="lbl">全对</div><div class="v">${ok}</div></div>
+      <div class="c"><div class="lbl">该单元累计</div><div class="v">${(STU.log||[]).length}</div></div>
+    </div>
+    <div class="sep"></div>
+    <div class="row">
+      <button class="btn pri" id="again">再来一轮</button>
+      <button class="btn ghost" id="toWeak">看薄弱点</button>
+    </div>
+  </div>`;
+  $("#again").onclick=()=>{ADV=pick(10);renderQ()};
+  $("#toWeak").onclick=()=>document.querySelector('[data-p="weak"]').click();
+}
+function renderWeak(){
+  if(!STU||!DATA){$("#weakBars").innerHTML=`<div class="hint">先开始练习。</div>`;return;}
+  const rows=DATA.topics.filter(t=>(STU.n[t.id]||0)>0)
+    .map(t=>({id:t.id,name:t.name,n:STU.n[t.id]||0,a:ability(t.id),
+      ch:chOf[t.id]===undefined,ok:(STU.n[t.id]||0)>=SHOW_AT}))
+    .sort((x,y)=>x.a-y.a).slice(0,18);
+  const lo=700,hi=1500;
+  $("#weakBars").innerHTML=rows.map(r=>{
+    const pct=Math.max(2,Math.min(100,(r.a-lo)/(hi-lo)*100));
+    return `<div class="bl"><div>
+      <div class="bname"><span>${esc(r.name)}</span>
+        ${r.ok?"":`<span class="pill warn">${r.n<MIN_T?"样本不足":"样本偏少"} ${r.n}次</span>`}</div>
+      <div class="bwrap"><div class="bfill ${!r.ok?"uns":r.a<950?"w":r.a<1100?"m":""}" style="width:${pct}%"></div></div>
+      </div><div class="bnum">${r.ok?Math.round(r.a):"—"}</div></div>`;}).join("")
+    ||`<div class="hint">还没有作答记录。</div>`;
+  const worst=rows.filter(r=>r.ok).slice(0,3);
+  const ec={}; (STU.errs||[]).forEach(e=>ec[e]=(ec[e]||0)+1);
+  const top=Object.entries(ec).sort((a,b)=>b[1]-a[1]).slice(0,2);
+  $("#advice").innerHTML= (worst.length?`<div style="margin-bottom:10px">最弱：
+      ${worst.map(w=>`<span class="pill warn">${esc(w.name)} ${Math.round(w.a)}</span>`).join(" ")}</div>`
+    :`<div class="hint">还没有足够数据给建议。</div>`)
+    + (top.length?`<div style="margin-bottom:10px">错因集中：
+      ${top.map(t=>`<span class="pill">${(ERRS.find(e=>e[0]===t[0])||[0,t[0]])[1]} ×${t[1]}</span>`).join(" ")}</div>`
+      + `<div class="hint">${top[0][0]==="algebra"||top[0][0]==="calc"
+        ?"错因集中在运算 —— 处方是限时计算训练，不是重学概念。"
+        :top[0][0]==="concept"?"错因集中在概念 —— 处方是回讲义重学该知识点，不是刷题。"
+        :top[0][0]==="setup"?"错因集中在建模列式 —— 处方是专练把文字转成方程。"
+        :"按错因分布安排下一步。"}</div>`:"")
+    + `<div class="sep"></div><div class="hint">下一轮将按 60% 补短板 / 25% 间隔重复 / 15% 拔高 出题，
+       并对未达标的前置知识点补漏。</div>`;
+}
+
+/* ---------- 我的数据（学生） ---------- */
+function renderMe(){
+  if(!STU){$("#meStat").innerHTML="";return}
+  const q=queue().length;
+  const lg=STU.log||[];
+  $("#meStat").innerHTML=`
+    <div class="c"><div class="lbl">累计作答</div><div class="v">${lg.length}</div></div>
+    <div class="c"><div class="lbl">已练知识点</div><div class="v">${Object.keys(STU.n||{}).length}</div></div>
+    <div class="c"><div class="lbl">待同步</div><div class="v" style="color:${q?"var(--amber)":"var(--mint)"}">${q}</div></div>`;
+  $("#meHint").innerHTML=API.mode==="server"
+    ?`作答先写入本机，再实时上报服务器；断网时进入队列（当前 <b>${q}</b> 条），恢复后自动补传。`
+    :`离线模式：数据只在本机浏览器，作答会实时保存，刷新与更新前的记录不会丢失。`;
+}
+$("#meExport").onclick=()=>{$("#ioBox").value=STU?JSON.stringify(STU,null,1):"";
+  toast("已导出到文本框")};
+$("#meSync").onclick=async()=>{await syncFromServer();renderMe();stats();
+  toast(queue().length?`还有 ${queue().length} 条待同步`:"同步完成")};
+$("#meImport").onclick=()=>{try{const o=JSON.parse($("#ioBox").value);
+  if(o.name&&STU&&o.name===STU.name){
+    const seen=new Set((STU.log||[]).map(x=>(x.aid||"")+"|"+x.qid+"|"+x.ts));
+    (o.log||[]).forEach(x=>{const k=(x.aid||"")+"|"+x.qid+"|"+x.ts;
+      if(!seen.has(k)){seen.add(k);STU.log.push(x)}});
+    STU.log.sort((a,b)=>a.ts-b.ts);saveStu();renderMe();stats();
+    toast("已合并导入");
+  } else alert("JSON 与当前身份不符");
+}catch(e){alert("JSON 解析失败："+e.message)}};
+$("#meClear").onclick=()=>{if(!STU)return;
+  if(confirm("清空本机副本？服务器上的作答保留，下次同步会拉回来。")){
+    localStorage.removeItem(key(STU.name));STU=newStu(STU.name);saveStu();
+    renderMe();stats();ADV=pick(10);renderQ();toast("本机副本已清空");}};
+
+/* ---------- 教师端 ---------- */
+async function renderRoster(){
+  const t=$("#stuTable");
+  t.innerHTML="<tr><th>学生</th><th class='num'>累计题数</th><th class='num'>正确率</th><th class='num'>已练知识点</th><th class='num'>可评估</th></tr><tr><td colspan=5 class='hint'>加载中…</td></tr>";
+  try{
+    const list=await api("/api/students");
+    const exp=await api("/api/export?light=1");
+    t.innerHTML="<tr><th>学生</th><th class='num'>累计题数</th><th class='num'>正确率</th><th class='num'>已练知识点</th><th class='num'>可评估</th></tr>"
+      + list.map(s=>{const e=exp.all&&exp.all[s.name]||{};
+        const ab=e.ability||[];
+        return `<tr><td>${esc(s.name)}</td><td class='num'>${s.n}</td>
+          <td class='num'>${s.n?Math.round(s.acc)+"%":"—"}</td>
+          <td class='num'>${ab.length}</td>
+          <td class='num'>${ab.filter(x=>x.reliable).length}</td></tr>`;}).join("")
+      ||"<tr><td colspan=5 class='hint'>还没有学生数据</td></tr>";
+    if(!list.length)t.innerHTML="<tr><td colspan=5 class='hint'>还没有学生数据</td></tr>";
+  }catch(e){t.innerHTML=`<tr><td colspan=5 class="hint">加载失败：${esc(e.message)}</td></tr>`}
+}
+async function renderHeat(){
+  const box=$("#heat");
+  box.innerHTML=`<div class="hint">加载中…</div>`;
+  try{
+    const d=await api("/api/export?light=1");
+    const names=Object.keys(d.all||{});
+    if(!names.length){box.innerHTML=`<div class="hint">还没有学生数据</div>`;return}
+    // topic -> {name,chapter, per-student {elo,n,reliable}}
+    const T={};
+    names.forEach(n=>{(d.all[n].ability||[]).forEach(a=>{
+      if(!T[a.topic])T[a.topic]={name:a.name,ch:a.chapter,by:{}};
+      T[a.topic].by[n]=a;})});
+    const rows=Object.entries(T).sort((a,b)=>(a[1].ch||"").localeCompare(b[1].ch||"")
+      ||a[1].name.localeCompare(b[1].name)).slice(0,60);
+    let h="<table><tr><th>知识点</th>"+names.map(n=>`<th class="num">${esc(n)}</th>`).join("")+"</tr>";
+    for(const [tid,t] of rows){
+      h+=`<tr><td>${esc(t.name)}<div class="hint" style="font-size:11px">${esc(t.ch||"")}</div></td>`
+        +names.map(n=>{const a=t.by[n];if(!a)return`<td class="num" style="color:var(--tx3)">—</td>`;
+          if(!a.reliable)return`<td class="num" style="color:var(--tx3)">${a.n}次</td>`;
+          const c=a.elo<950?"var(--red)":a.elo<1100?"var(--amber)":"var(--mint)";
+          return`<td class="num" style="color:${c};font-weight:650">${a.elo}</td>`;}).join("")+"</tr>";
+    }
+    box.innerHTML=h+"</table><div class='hint' style='margin-top:10px'>未达 "+SHOW_AT+
+      " 次作答的显示次数而非分数；分数上色：红 &lt;950 / 黄 &lt;1100 / 绿 ≥1100。</div>";
+  }catch(e){box.innerHTML=`<div class="hint">加载失败：${esc(e.message)}</div>`}
+}
+async function renderRecent(){
+  const t=$("#recentTable");
+  t.innerHTML="<tr><td colspan='6' class='hint'>加载中…</td></tr>";
+  try{
+    const d=await api("/api/sync");
+    const rows=(d.attempts||[]).slice(-80).reverse();
+    t.innerHTML="<tr><th>时间</th><th>学生</th><th>题目</th><th class='num'>得分</th><th class='num'>用时</th><th>错因</th></tr>"
+      + rows.map(a=>`<tr><td class='hint'>${esc(a.ts)}</td><td>${esc(a.name)}</td>
+        <td class="hint" style="font-family:ui-monospace,Menlo,monospace">${esc(a.qid)}</td>
+        <td class="num">${a.score===1?"✓":a.score===0.5?"◑":"✗"}</td>
+        <td class="num">${a.secs||0}s</td>
+        <td>${a.err?esc((ERRS.find(e=>e[0]===a.err)||[0,a.err])[1]):"—"}</td></tr>`).join("")
+      ||"<tr><td colspan='6' class='hint'>还没有作答</td></tr>";
+    const last=(d.attempts||[]).slice(-1)[0];
+    $("#syncInfo").textContent=last?`最新作答：${last.ts}`:"";
+  }catch(e){t.innerHTML=`<tr><td colspan='6' class="hint">加载失败：${esc(e.message)}</td></tr>`}
+}
+$("#refreshRoster").onclick=renderRoster;
+$("#refreshRecent").onclick=renderRecent;
+$("#expAll").onclick=async()=>{
+  try{
+    const d=await api("/api/export");
+    const b=new Blob([JSON.stringify(d,null,1)],{type:"application/json"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(b);
+    a.download="全部学生数据.json";a.click();toast("已导出全部数据");
+  }catch(e){alert("导出失败："+e.message)}
+};
+$("#paper").onclick=async()=>{
+  const name=prompt("为哪位学生生成专项练习？");if(!name)return;
+  const unit=$("#unitSel").value||"";
+  try{
+    const url=`/api/quiz?name=${encodeURIComponent(name)}&unit=${encodeURIComponent(unit)}&n=20&token=${encodeURIComponent(API.tok)}`;
+    window.open(url,"_blank");
+  }catch(e){alert("生成失败："+e.message)}
+};
+
+/* ============ 事件 / 启动 ============ */
+$("#saveWho").onclick=()=>{
+  const n=$("#nameIn").value.trim(); if(!n){toast("填学生姓名");return}
+  STU=load(n)||newStu(n); STU.errs=STU.errs||[]; localStorage.setItem("mathbank:current",n);
+  $("#who").textContent=n;
+  loadUnit($("#unitSel").value,()=>{ADV=pick(10);stats();renderQ()});
+};
+$("#nameIn").addEventListener("keydown",e=>{if(e.key==="Enter")$("#saveWho").click()});
+  $("#unitSel").onchange=()=>{CHSEL=null;SKIPPED.clear();SKIPPED_SCOPE=null;SKIPPED_CH=null;
+  loadUnit($("#unitSel").value,()=>{if(STU){ADV=pick(10);stats();renderQ();}});};
+window.addEventListener("online",()=>flushQueue());
+
+(async function boot(){
+  units();
+  if(localStorage.getItem("mathbank:switchRole")==="1"){
+    localStorage.removeItem("mathbank:switchRole");
+    API.forceLogin=true;
+  }
+  // 探测服务端：file:// 或无服务 → 离线本机模式
+  let me=null;
+  try{
+    const ctl=new AbortController();setTimeout(()=>ctl.abort(),4000);
+    const r=await fetch("/api/me",{headers:API.tok?{"Authorization":"Bearer "+API.tok}:{},
+      signal:ctl.signal});
+    me=await r.json();
+  }catch(e){me=null}
+  if(!me||!me.role||API.forceLogin){
+    if(API.tok&&!me){API.tok="";localStorage.removeItem("mathbank:token")}
+    if(me&&!me.role&&API.tok){API.tok="";localStorage.removeItem("mathbank:token")}
+    if((location.protocol==="file:"||!me)&&!API.forceLogin){
+      enterLocal();                       // 双击打开 / 服务不在 → 本机离线模式（无教师面板）
+      return;
+    }
+    openLogin();
+    loadUnit($("#unitSel").value);
+    return;
+  }
+  API.role=me.role;API.name=me.name;API.online=true;API.mode="server";
+  enterRole();
+})();
+})();
+</script>
+</body>
+</html>

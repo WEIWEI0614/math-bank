@@ -1,0 +1,5 @@
+# 线上练习服务只依赖 Python 标准库。
+# 题库构建和图片裁剪脚本在开发机使用：
+PyMuPDF
+Pillow
+numpy
