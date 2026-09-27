@@ -583,7 +583,11 @@ let LG_ROLE="student";
 function openLogin(msg){
   $("#ovl").classList.remove("hide");
   $("#lgErr").textContent=msg||"";
-  setTimeout(()=>{(LG_ROLE==="student"?$("#lgName"):$("#lgTPass")).focus()},80);
+  // 80ms 后再自动聚焦；若用户/自动化已抢先聚焦某个输入框，不要把焦点抢走
+  //（否则延迟 focus 会把随后键入的内容串进上一个字段）。
+  setTimeout(()=>{const a=document.activeElement;
+    if(!a||a===document.body||a===document.documentElement)
+      (LG_ROLE==="student"?$("#lgName"):$("#lgTPass")).focus()},80);
 }
 function closeLogin(){$("#ovl").classList.add("hide")}
 function setRole(r){
@@ -739,7 +743,9 @@ function pick(n){
   const chapterId=window.__chapterId||null;
   const roundKey=`${UNIT}|${chapterId||""}`;
   const scopeQuestions=DATA.questions.filter(q=>!chapterId||chOf[q[1]]===chapterId);
-  if(scopeQuestions.length)n=scopeQuestions.length;
+  // 轮次默认 10 题（SPEC 8.1）；只有可出题不足 10 时才按实际题量收窄，
+  // 不能把轮次放大成整章/整单元——否则「本轮完成 / 再来一轮」永远到不了。
+  if(scopeQuestions.length<n)n=scopeQuestions.length;
   const topicCount={};
   DATA.questions.forEach(q=>{topicCount[q[1]]=(topicCount[q[1]]||0)+1});
   const tp=DATA.topics.filter(t=>(t.nq>0||topicCount[t.id]>0)
