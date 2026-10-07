@@ -1,0 +1,14 @@
+.env
+.teacher_key
+.student_code
+mirror_state.json
+*.pyc
+__pycache__/
+.DS_Store
+bank.sqlite-wal
+bank.sqlite-shm
+output/
+selfcheck/
+shots/
+shot_*.png
+_repair_backup_*/
