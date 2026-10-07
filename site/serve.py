@@ -69,10 +69,10 @@ QID_RE   = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
 TOPIC_RE = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
 ERR_SET  = {"concept", "procedure", "setup", "algebra", "calc", "time", "misread"}
 CSP = ("default-src 'self'; "
-       "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
-       "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+       "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+       "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
        "img-src 'self' data:; "
-       "font-src https://cdnjs.cloudflare.com data:; "
+       "font-src 'self' data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
        "connect-src 'self'; object-src 'none'; base-uri 'self'; "
        "frame-ancestors 'self'")
 
@@ -176,6 +176,99 @@ def get_sid(con, name):
     con.execute("INSERT INTO student (sid,name,created_at) VALUES (?,?,datetime('now'))", (sid, name))
     con.commit()
     return sid
+
+def get_sid_or_none(con, name):
+    """只读查找：命中不到返回 None，**绝不建号**。
+
+    get_sid()带 INSERT 副作用，早前被 /api/quiz、/api/export 这类 GET 接口
+    当作只读查询复用，导致教师拼错一次姓名就把幽灵学生永久写进花名册
+    （GET 还绕过了 POST 才有的同源校验）。建号只应发生在真正需要它的
+    /api/login 与 /api/attempt 上。
+    """
+    r = con.execute("SELECT sid FROM student WHERE name=?", (name,)).fetchone()
+    return r[0] if r else None
+
+
+# 题干/判分细则常粘着版权声明（原卷 OCR 带进来的），出卷时必须裁掉：
+# 让学生看到 UCLES/Cambridge 的版权页不合适，也会把整张卷子的文字撑脏。
+# 两种位置都存在：stem_md 多在尾部，ms_md 多在开头（"© UCLES 2022\nPage 6 of 20\n\n1..."）。
+# 题干尾部常粘着整段版权/出版声明（原卷 OCR 带进来的），出卷时必须裁掉：
+# 让学生看到 UCLES/Cambridge 的版权页、以及 www.OnlineExamHelp.com 这类
+# 第三方试卷站水印都不合适，也会把整张卷子的文字撑脏。
+#
+# 关键：绝大多数版权尾巴是**与正文同行**的（实测 321 道含
+# "Permission to reproduce" 的题里320 道同行），所以不能要求
+# 版权特征独占一行 —— 那样规则对 99.7% 的真实情况失效。
+# 改为：从「版权特征短语首次出现的位置」截断到文末。
+_PAPER_TAIL_CUES = [
+    "Permission to reproduce",
+    "Items where third-party",
+    "Photocopiable",
+    "Additional Page",
+    "Do not write in this margin",
+    "UCLES ",
+    "University of Cambridge International Examinations is part of",
+    "CambridgeAssessment is the brand name",
+    "wishes to thank the following",
+]
+# 第三方试卷站水印：整行或行内出现都清掉。
+# 域名后面常紧跟孤立页码（如 "www.OnlineExamHelp.com 3"），所以不能要求
+# 其后必须是换行，否则会漏掉这一类（实测残留 12 条全是这种形态）。
+_PAPER_WATERMARK = re.compile(
+    r"(?:\n|\s)*(?:www\.)?[A-Za-z0-9.-]*(?:OnlineExamHelp|ExamHelp|"
+    r"DocsTeach|PastPapers|ExamTube)[A-Za-z0-9.-]*(?:\.[a-z]{2,})?"
+    r"\s*\.?\s*\d*\s*(?=\n|$)", re.I)
+
+
+def _strip_paper_tail(t):
+    """从版权特征短语处截断到文末；找不到就不动（避免误伤正常正文）。"""
+    cut = len(t)
+    for cue in _PAPER_TAIL_CUES:
+        i = t.lower().find(cue.lower())
+        if i >= 0:
+            cut = min(cut, i)
+    # 页码行「Page N of M」出现在尾部时也一并裁掉
+    m = None
+    for m2 in re.finditer(r"(?:^|\n)Page\s+\d+\s+of\s+\d+\s*(?=\n|$)", t, re.I):
+        m = m2
+    if m:
+        cut = min(cut, m.start())
+    return t[:cut] if cut < len(t) else t
+# 开头版权是「整行」形态（© UCLES 2022 / © Cambridge ... 2025 / Page 6 of 20），
+# 逐行剥离即可 —— 不能用宽松正则跨行匹配，否则会把正文一起吃掉。
+_PAPER_HEAD_LINE = re.compile(
+    r"^(?:\s*©.*|\s*\(c\).*|\s*Cambridge University.*|\s*UCLES\s+\d{4}.*"
+    r"|\s*Page\s+\d+\s+of\s+\d+\s*|\s*Photocopiable.*"
+    r"|\s*Permission\s+to\s+reproduce.*|\s*Additional\s+Page.*"
+    r"|\s*Do\s+not\s+write\s+in\s+this\s+margin.*)$", re.I)
+
+
+def clean_paper_text(t):
+    """出卷用：去版权/页眉页脚残留、去第三方站点水印、去 Latin-1 乱码、压过多空行。"""
+    if not t:
+        return ""
+    lines = t.split("\n")
+    # 只剥开头连续的版权/页眉行；遇到正文立即停止，不做全局替换
+    while lines and (not lines[0].strip() or _PAPER_HEAD_LINE.match(lines[0])):
+        lines.pop(0)
+    t = "\n".join(lines)
+    t = _strip_paper_tail(t)
+    # 先按上面的正则整体清一遍；再逐个域名做兜底删除，处理
+    # "com com 3" / "com 7 8" 这类域名与孤立页码交错、整体正则吃不全的形态
+    t = _PAPER_WATERMARK.sub("", t)
+    for _ in range(6):                      # 迭代到收敛，最多 6 轮防死循环
+        t2 = re.sub(r"(?:www\.)?(?:OnlineExamHelp|ExamHelp|DocsTeach|PastPapers|ExamTube)"
+                    r"[A-Za-z0-9.-]*\.(?:com|net|org|co\.uk|cn)(?:\s*\d+)*\s*",
+                    "", t, flags=re.I)
+        if t2 == t:
+            break
+        t = t2
+    # OCR 常把版权段读成 Latin-1 乱码（如 "ĬÍĊ®Ġ´−ÈõÏĪ°ĊÝúµĂ×"），
+    # 这类字符成串出现即为误读，直接丢弃，避免不可读文字混进卷子。
+    t = re.sub(r"[Ā-ſ]{6,}", "", t)
+    t = t.replace("�", "")
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
 
 def ability(con, sid):
     """按 engine.py 的规则重算能力分（服务端是权威，客户端只是缓存）。"""
@@ -295,12 +388,16 @@ class H(SimpleHTTPRequestHandler):
         if u.path == "/api/export":
             if not s:
                 return self._json({"err": "需要登录"}, 401)
-            name = ((q.get("name") or [""])[0] or "").strip()[:40]
+            # 只读身份判定用独立的 req_name / export_all 两个变量：
+            # 早前这里复用了后面 export 分支还要再读一次的 name，
+            # 结果学生「不带 name」的请求在下游被重置成""，落进「教师全员导出」分支，
+            # 导致学生 token 能导出全班数据。两者必须分开，不可复用。
+            req_name = ((q.get("name") or [""])[0] or "").strip()[:40]
             if s["role"] == "student":
-                if not name:
-                    name = s["name"]                    # 学生不带 name = 导出自己
-                elif name != s["name"]:
-                    return self._json({"err": "只能导出自己的数据"}, 403)
+                # 学生永远只能导出自己：即便显式传了 name=别人 也忽略，
+                # 直接以 token 里的身份为准（原实现是返回 403，功能等价但更易被绕）
+                req_name = s["name"]
+            export_all = (s["role"] == "teacher" and not req_name)
         if u.path == "/api/sync":
             # 镜像守护增量拉取：since 为空 = 全量
             since = ((q.get("since") or [""])[0] or "").strip()[:40]
@@ -322,14 +419,26 @@ class H(SimpleHTTPRequestHandler):
                  "secs": r[5], "err": r[6], "why": r[7], "self": r[8]} for r in rows]})
         if u.path == "/api/students":
             con = db()
-            rows = con.execute("""SELECT s.name, COUNT(a.aid), AVG(a.score)
+            # last_ts / weak_top：教师要回答的是「该关注谁、该补什么」，
+            # 只给累计题数与正确率无法排序也无法定位，必须带上最近活跃与最弱知识点。
+            rows = con.execute("""SELECT s.name, s.created_at, COUNT(a.aid), AVG(a.score), MAX(a.ts)
                                   FROM student s LEFT JOIN attempt a ON a.sid=s.sid
-                                  GROUP BY s.sid ORDER BY s.name""").fetchall()
+                                  GROUP BY s.sid ORDER BY MAX(a.ts) DESC, s.name""").fetchall()
+            out = []
+            for nm, created, cnt, acc, last in rows:
+                sid = con.execute("SELECT sid FROM student WHERE name=?", (nm,)).fetchone()[0]
+                ab, _ = ability(con, sid)
+                weak = sorted([b for b in ab if b["n"] >= 1],
+                              key=lambda b: b["elo"])[:3]
+                out.append({"name": nm, "n": cnt, "acc": round((acc or 0) * 100),
+                            "created": created, "last": last,
+                            "weak": [{"name": b["name"], "elo": round(b["elo"]),
+                                      "n": b["n"]} for b in weak]})
             con.close()
-            return self._json([{"name": n, "n": c, "acc": round((a or 0) * 100)} for n, c, a in rows])
+            return self._json(out)
         if u.path == "/api/export":
-            name = ((q.get("name") or [""])[0] or "").strip()[:40]
-            if not name:
+            name = req_name                     # 已在鉴权段收敛：学生=自己，教师=指定或空
+            if export_all:
                 # 教师不带 name = 全员导出（镜像/备份用）；light=1 只回能力分（热力图用）
                 light = ((q.get("light") or [""])[0] or "") == "1"
                 con = db()
@@ -348,7 +457,11 @@ class H(SimpleHTTPRequestHandler):
                          "err": r[4], "topic": r[5]} for r in rows]}
                 con.close()
                 return self._json({"all": out})
-            con = db(); sid = get_sid(con, name)
+            con = db()
+            sid = get_sid_or_none(con, name)    # 只读查找：导出不建号
+            if not sid:
+                con.close()
+                return self._json({"err": "学生不存在"}, 404)
             rows = con.execute("""SELECT aid, qid, ts, score, secs, err_type, resp_raw,
                                   (SELECT topic_id FROM question WHERE question.qid=attempt.qid)
                                   FROM attempt WHERE sid=? ORDER BY ts""", (sid,)).fetchall()
@@ -367,26 +480,94 @@ class H(SimpleHTTPRequestHandler):
             except Exception:
                 n = 10
             n = max(1, min(n, 50))          # 钳制：防超大 LIMIT
-            con = db(); sid = get_sid(con, name)
+            con = db()
+            sid = get_sid_or_none(con, name)   # 只读：拼错姓名返回 404，不建号
+            if not sid:
+                con.close()
+                return self._json({"err": "学生不存在，请从花名册选择"}, 404)
             ab, _ = ability(con, sid)
             tops = [b["topic"] for b in ab if not b["reliable"]][:5] or [b["topic"] for b in ab[:5]]
             ph = ",".join("?" * len(tops)) or "''"
-            rows = con.execute(f"""SELECT qid,stem_md,marks,topic_id FROM question
-                WHERE topic_id IN ({ph}) {'AND unit=?' if unit else ''}
-                ORDER BY RANDOM() LIMIT ?""", (*tops, *( [unit] if unit else [] ), n)).fetchall()
+            rows = con.execute(f"""SELECT q.qid,q.stem_md,q.marks,q.topic_id,q.figs,q.answer_key,q.ms_md
+                FROM question q
+                WHERE q.topic_id IN ({ph}) {'AND q.unit=?' if unit else ''}
+                ORDER BY RANDOM() LIMIT ?""",
+                (*tops, *([unit] if unit else []), n)).fetchall()
             names = {t: nm for t, nm in con.execute("SELECT topic_id,name_cn FROM topic")}
+            # 统计实际覆盖到的知识点，用于在卷头回显，避免静默降级成单单元卷
+            covered = {}
+            for r in rows:
+                covered[names.get(r[3], r[3])] = covered.get(names.get(r[3], r[3]), 0) + 1
             con.close()
             import html
-            body = "".join(f'<div class=q><div class=m>第 {i+1} 题 · '
-                           f'{html.escape(names.get(r[3],""))} · {r[2]} 分</div>'
-                           f'<div class=s>{html.escape(r[1] or "")}</div></div>'
-                           for i, r in enumerate(rows))
+            KATEX = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist"
+
+            def _imgs(figs):
+                """figs 是 JSON 数组；只取 stem/full 图，判分细则图不要"""
+                try:
+                    arr = json.loads(figs) if figs else []
+                except Exception:
+                    return []
+                out = []
+                for a in arr:
+                    f = a.get("file", "")
+                    if f and "ms" not in f.lower() and "answer" not in f.lower():
+                        out.append(f)
+                return out
+
+            blocks = []
+            for i, r in enumerate(rows):
+                figs = _imgs(r[4])
+                figh = "".join(
+                    f'<div class=fig><img src="{html.escape(f)}" alt="原卷题图" loading="lazy"></div>'
+                    for f in figs)
+                ans = (r[5] or "").strip()
+                ms = clean_paper_text(r[6] or "")
+                # 全库仅 1227/12064 题有 answer_key（多为 SMC/BMO 客观题）；
+                # 解答题给不出简答，只能附判分细则原文 —— 对教师同样有用，
+                # 总比光秃秃一道题好（早前版本两样都不给，卷子直接不可用）。
+                tail = (f'<div class=ans>参考答案：{html.escape(ans)}</div>' if ans
+                        else (f'<details class=msd><summary>判分细则（无简答）</summary>'
+                              f'<div class=msbody>{html.escape(ms)}</div></details>' if ms else ""))
+                blocks.append(f'<div class=q><div class=m>第 {i+1} 题 · '
+                              f'{html.escape(names.get(r[3],""))} · {r[2]} 分</div>'
+                              f'<div class=s>{clean_paper_text(r[1] or "")}</div>'
+                              f'{figh}{tail}</div>')
+            body = "".join(blocks)
+            # 覆盖知识点回显：让教师看到这份卷子实际练了什么，而不是以为覆盖了 5 个弱项
+            cov_txt = "、".join(f"{k}（{v}题）" for k, v in
+                                sorted(covered.items(), key=lambda x: -x[1]))
+            filter_note = (f'<p class=warn>已按单元「{html.escape(unit)}」筛选，'
+                           f'薄弱知识点命中 {len(covered)} 个。</p>' if unit else "")
             doc = ('<!DOCTYPE html><html lang=zh-CN><head><meta charset=utf-8><title>专项练习</title>'
+                   f'<link rel=stylesheet href="{KATEX}/katex.min.css">'
+                   f'<script defer src="{KATEX}/katex.min.js"></script>'
+                   f'<script defer src="{KATEX}/contrib/auto-render.min.js"></script>'
                    '<style>body{font:15px/1.8 system-ui,"PingFang SC";max-width:780px;margin:24px auto;'
                    'padding:0 16px}.q{margin:22px 0;padding-bottom:18px;border-bottom:1px dashed #bbb}'
-                   '.m{color:#666;font-size:13px}.s{white-space:pre-wrap}</style></head><body>'
+                   '.m{color:#666;font-size:13px}.s{white-space:pre-wrap}'
+                   '.warn{color:#a05a00;background:#fff6e6;padding:8px 12px;border-radius:8px}'
+                   '.cov{color:#555;font-size:13px}.fig img{max-width:100%;border:1px solid #ddd;'
+                   'border-radius:6px;margin-top:8px}'
+                   '.ans{margin-top:10px;padding:8px 12px;background:#f2f7f2;border-left:3px solid #4a8;'
+                   'border-radius:0 6px 6px 0;color:#245}'
+                   '.msd{margin-top:10px;border:1px solid #ddd;border-radius:8px;overflow:hidden}'
+                   '.msd>summary{cursor:pointer;padding:7px 12px;font-size:13px;color:#555;'
+                   'background:#fafafa;list-style:none}.msd>summary::-webkit-details-marker{display:none}'
+                   '.msd>summary::before{content:"▸ ";color:#999}'
+                   '.msd[open]>summary::before{content:"▾ "}'
+                   '.msbody{padding:10px 12px;white-space:pre-wrap;font-size:13.5px;color:#333;'
+                   'border-top:1px solid #eee}</style></head><body>'
                    f'<h2>{html.escape(name)} · 薄弱点专项练习（{len(rows)} 题）</h2>'
-                   f'<p class=m>按引擎判定的薄弱知识点抽取 · {time.strftime("%Y-%m-%d %H:%M")}</p>{body}</body></html>')
+                   f'<p class=m>按引擎判定的薄弱知识点抽取 · {time.strftime("%Y-%m-%d %H:%M")}</p>'
+                   f'<p class=cov>实际覆盖 {len(covered)} 个知识点：{html.escape(cov_txt)}</p>'
+                   f'{filter_note}{body}'
+                   '<script>window.addEventListener("load",function(){'
+                   'if(window.renderMathInElement)renderMathInElement(document.body,{delimiters:'
+                   '[{left:"$$",right:"$$",display:true},{left:"\\\\[",right:"\\\\]",display:true},'
+                   '{left:"\\\\(",right:"\\\\)",display:false},{left:"$",right:"$",display:false}],'
+                   'throwOnError:false,ignoredTags:["script","style"]});});</script>'
+                   '</body></html>')
             b = doc.encode()
             self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
