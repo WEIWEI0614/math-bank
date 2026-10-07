@@ -6,7 +6,9 @@
 <meta name="theme-color" content="#0b1018">
 <meta name="color-scheme" content="dark">
 <title>数学练习台 · 自适应</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<!-- KaTeX 走本地 vendor（老师机器断网/校园网墙了 CDN 也能渲染），CDN 仅作兜底 -->
+<link rel="stylesheet" href="vendor/katex/katex.min.css"
+      onerror="this.onerror=null;var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';document.head.appendChild(l);">
 <style>
  :root{
   --bg:#0b1018; --panel:#121a25; --panel2:#172232; --panel3:#202d40;
@@ -143,6 +145,24 @@ padding-bottom:13px;border-bottom:1px dashed var(--line)}
 .qmeta b{color:var(--tx2);font-weight:600}
 
 .qfigs{display:flex;flex-direction:column;gap:13px;margin:15px 0 7px}
+/* 原卷截图默认折叠：题干已是文本，图只在需要核对时展开，避免每题先扫一张整页 A4 */
+.figfold{margin:14px 0 0;border:1px solid var(--line);border-radius:11px;
+  background:var(--panel2);overflow:hidden}
+.figfold>summary{cursor:pointer;padding:11px 14px;font-size:13.5px;color:var(--tx2);
+  list-style:none;user-select:none;display:flex;align-items:center;gap:8px}
+.figfold>summary::-webkit-details-marker{display:none}
+.figfold>summary::before{content:"▸";color:var(--tx3);font-size:11px;transition:transform .15s}
+.figfold[open]>summary::before{transform:rotate(90deg)}
+.figfold>summary:hover{color:var(--tx);background:rgba(255,255,255,.03)}
+.figfold .qfigs{margin:0;padding:0 14px 14px}
+.txtfold{margin:14px 0 0;border:1px solid var(--line);border-radius:11px;
+  background:var(--panel2);overflow:hidden}
+.txtfold>summary{cursor:pointer;padding:11px 14px;font-size:13.5px;color:var(--tx2);
+  list-style:none;user-select:none}
+.txtfold>summary::-webkit-details-marker{display:none}
+.txtfold>summary::before{content:"▸ ";color:var(--tx3)}
+.txtfold[open]>summary::before{content:"▾ "}
+.txtfold .stem{margin:0;padding:0 14px 14px}
 .fig{margin:0;background:#fff;border:1px solid rgba(255,255,255,.28);border-radius:13px;padding:7px;
 box-shadow:var(--shadow);position:relative;overflow:hidden}
 .fig img{display:block;max-width:100%;height:auto;border-radius:6px;cursor:zoom-in;background:#fff}
@@ -168,6 +188,16 @@ details.ocr .stem{font-size:14px;color:var(--tx2)}
 border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14.5px;line-height:1.6;
 transition:border-color .15s}
 .opts .opt:hover{border-color:rgba(120,184,255,.5);background:var(--panel3);transform:translateX(3px)}
+/* 选项已是 <button>：补齐按钮语义与可点反馈，并区分「不是选择题的纯展示」与
+   「可作答」——只有 .opts[data-auto="1"] 才给悬停位移，避免静态文本被误认为可点。*/
+.opts .opt{font-family:inherit;color:var(--tx);text-align:left;cursor:default;width:100%}
+.opts[data-auto="1"] .opt{cursor:pointer}
+.opts[data-auto="1"] .opt:active{transform:translateX(1px)}
+.opts .opt.on{border-color:var(--amber);background:rgba(255,180,84,.1)}
+.opts .opt.good{border-color:#3f9c6d;background:rgba(63,156,109,.14)}
+.opts .opt.good b{background:rgba(63,156,109,.22);color:#7fd4a4}
+.opts .opt.bad{border-color:#c05656;background:rgba(192,86,86,.12)}
+.opts .opt.bad b{background:rgba(192,86,86,.22);color:#f09090}
 .opts .opt b{flex:0 0 22px;height:22px;line-height:22px;text-align:center;border-radius:7px;
 background:rgba(255,180,84,.14);color:var(--amber);font-size:13px;font-weight:700}
 
@@ -291,7 +321,15 @@ transition:.25s;z-index:120;max-width:86vw;text-align:center}
   .stat{grid-template-columns:repeat(2,1fr)}
   .bar-in{padding:10px 12px 0}
   .ttl small{display:none}
-  .selfrow .btn{flex:1;min-width:44%}
+  /* .row 里的表单控件改为竖排：原先 select/input/button 挤在一行，
+     实测 #unitSel 宽 363px 而容器仅 314px，右侧溢出 11px 被视口裁掉，
+     而单元选择是练习第一步，选错后面全错。*/
+  .row{flex-direction:column;align-items:stretch}
+  .row>select,.row>input,.row>.btn{width:100%;min-width:0}
+  .selfrow{flex-wrap:wrap}
+  .selfrow .btn{flex:1 1 44%;min-width:44%}
+  /* 可点按区域抬到 44px（iOS 建议值）：原先 42px 且「做错了/没做完」紧邻，易误触 */
+  .selfrow .btn,.chip{min-height:44px}
 }
 </style>
 </head>
@@ -366,6 +404,16 @@ transition:.25s;z-index:120;max-width:86vw;text-align:center}
         <button class="btn" id="paper">生成薄弱点专项练习 (HTML)</button>
         <button class="btn ghost" id="refreshRoster">刷新</button>
       </div>
+      <div class="row" style="margin-top:10px">
+        <label class="lbl" style="margin:0;white-space:nowrap">出卷范围</label>
+        <select id="paperUnit"><option value="">全部单元（按薄弱点抽题）</option></select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label class="lbl" style="margin:0;white-space:nowrap">学生</label>
+        <select id="paperStu"><option value="">— 选择学生 —</option></select>
+      </div>
+      <div class="hint" style="margin-top:8px">默认按引擎判定的薄弱知识点抽题；
+        选了具体单元则只在该单元内抽。卷头会回显实际覆盖的知识点，便于核对。</div>
       <div class="hint" style="margin-top:11px">数据存服务器数据库；本机可用 <b>mirror.py</b> 实时镜像，重新发布不会丢作答。</div>
       <div class="sep"></div>
       <div class="lbl">引擎参数（与 engine.py 一致）</div>
@@ -448,8 +496,10 @@ transition:.25s;z-index:120;max-width:86vw;text-align:center}
 
 <div id="toast"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script src="vendor/katex/katex.min.js"></script>
+<script>window.katex||document.write('<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>')</script>
+<script src="vendor/katex/auto-render.min.js"></script>
+<script>window.renderMathInElement||document.write('<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"><\/script>')</script>
 <script src="data/index.js"></script>
 <script>
 (function(){
@@ -471,7 +521,28 @@ const $=s=>document.querySelector(s);
 const key=n=>"mathbank:"+n;
 function load(n){try{return JSON.parse(localStorage.getItem(key(n))||"null")}catch(e){return null}}
 function save(n,v){localStorage.setItem(key(n),JSON.stringify(v))}
-function saveStu(){if(STU)save(STU.name,STU)}
+function saveStu(){
+  if(STU)save(STU.name,STU);
+  saveRound();                       // 连同本轮队列一起落盘，刷新后可续
+}
+/* 轮次进度持久化：只存题目 id + 选题理由，不存整个 ADV 对象。
+   刷新后按同样的字段结构重建，避免 D/why 丢失导致「补短板/拔高」标签错乱。*/
+function saveRound(){
+  if(typeof STU==="undefined"||!STU)return;
+  try{
+    save("__round__"+STU.name,{unit:UNIT,ch:window.__chapterId||null,
+      items:(ADV||[]).map(x=>({qid:x.qid,why:x.why||"继续上次"})),
+      total:ADV_N||(ADV?ADV.length:0),ts:Date.now()});
+  }catch(e){}
+}
+function loadRound(name){
+  try{
+    const r=load("__round__"+name);
+    // 超过 2 小时的轮次视为过期，避免第二天接着做昨天的题
+    if(!r||!r.items||!r.items.length||Date.now()-(r.ts||0)>2*3600*1000)return null;
+    return r;
+  }catch(e){return null}
+}
 function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("on");
   clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),2600)}
 function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
@@ -710,11 +781,39 @@ function enterLocal(){
   document.querySelector('[data-p="me"]').classList.remove("hide");
   units();
   $("#storageBadge").textContent="本地实时记录";
+  const cur=localStorage.getItem("mathbank:current");
+  // 恢复上次所在单元，否则刷新后会被 reset 回第一个单元
+  if(cur){
+    const r=loadRound(cur);
+    if(r&&r.unit&&UNIT_INDEX.some(u=>u.code===r.unit)){
+      $("#unitSel").value=r.unit;
+    }
+  }
   loadUnit($("#unitSel").value,()=>{
-    const cur=localStorage.getItem("mathbank:current");
-    if(cur){$("#nameIn").value=cur;STU=load(cur)||newStu(cur);STU.errs=STU.errs||[];
-      $("#who").textContent=cur;ADV=pick(10);stats();renderQ();}
-    else{stats();renderQ();}
+    if(!cur){stats();renderQ();return}
+    $("#nameIn").value=cur;STU=load(cur)||newStu(cur);STU.errs=STU.errs||[];
+    $("#who").textContent=cur;
+    // 优先恢复上轮队列（同一学生+同一单元+同一章节才恢复，避免串题）
+    const r=loadRound(cur);
+    let restored=false;
+    if(r&&r.unit===UNIT&&(r.ch||null)===(window.__chapterId||null)&&r.items.length){
+      const byId={};DATA.questions.forEach(q=>{byId[q[0]]=q});
+      const rebuilt=[];
+      for(const it of r.items){
+        const q=byId[it.qid];
+        if(!q)continue;                    // 该题已不在当前数据里（换单元/换库），跳过
+        rebuilt.push({qid:it.qid,topic:q[1],why:it.why||"继续上次",
+          D:D_of(q[3]),marks:q[2]});
+      }
+      if(rebuilt.length){ADV=rebuilt;restored=true}
+    }
+    if(!restored){ADV=pick(10)}
+    /* ADV_N 是本轮总题数，原本只在 pick() 里赋值；恢复队列时必须同步，
+       否则题号算成「第 -9/0 题」（ADV_N=0）。total 是保存时的原始总数。*/
+    ADV_N=restored?((r&&r.total)||ADV.length):ADV.length;
+    saveRound();
+    stats();renderQ();
+    if(restored)toast("已恢复上次进度 · 第 "+(ADV_N-ADV.length+1)+"/"+ADV_N+" 题");
   });
 }
 
@@ -951,6 +1050,10 @@ function units(){
   const last=localStorage.getItem("mathbank:lastUnit");
   if(last&&UNIT_INDEX.some(u=>u.code===last))$("#unitSel").value=last;
   if(!$("#unitSel").value && UNIT_INDEX.length)$("#unitSel").value=UNIT_INDEX[0].code;
+  // 教师端出卷范围：与学生端单元选择相互独立，默认「全部单元」
+  const pu=$("#paperUnit");
+  if(pu)pu.innerHTML='<option value="">全部单元（按薄弱点抽题）</option>'
+    +UNIT_INDEX.map(u=>`<option value="${u.code}">${esc(u.name)}</option>`).join("");
 }
 function loadUnit(code,cb){
   $("#loadHint").innerHTML="<span>加载中…</span><b>学生数据仅在本人端可见</b>";
@@ -1025,13 +1128,79 @@ function stats(){
   const badge=$("#storageBadge");
   if(badge)badge.textContent=`已保存 ${lg.length} 条`;
 }
+/* 选项从纯展示改为可作答：此前是<div class="opt">，点击无任何反应，
+   522 道客观题全部退化为「纯自评」——系统拿不到作答数据，Elo 全靠自评可信度。
+   现在渲染为 <button data-k>，由objectiveAnswer() 判定对错后自动提交。*/
 function optBlock(q){
   if(!q[7])return"";
-  return `<div class="opts">${Object.entries(q[7]).map(([k,v])=>
-    `<div class="opt"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join("")}</div>`;
+  const ans=objectiveAnswer(q);
+  return `<div class="opts" data-auto="${ans?"1":"0"}">${Object.entries(q[7]).map(([k,v])=>
+    `<button type="button" class="opt" data-k="${esc(k)}"><b>${esc(k)}</b><span>${esc(cleanOptText(v))}</span></button>`).join("")}</div>`
+    +(ans?`<div class="hint" style="margin-top:6px">选择后自动判分</div>`:"");
+}
+/* OCR 把选项末尾的版权/页码一起带进来了（实测 18 个选项含
+   "© UCLES 2016 \f 5" / "[Turn over"），直接显示在答案旁边很难看。
+   只在渲染层过滤，不改数据文件。*/
+const OPT_TAIL=/(©\s*UCLES\s*\d{4}[\s\S]*|Permission\s+to\s+reproduce[\s\S]*|OnlineExamHelp[\s\S]*)$/i;
+function cleanOptText(v){
+  let t=String(v==null?"":v);
+  // U+F000–U+F0FF 是 Symbol 字体被 OCR 读成私用区码位（勾/乘号/分数线），
+  // 低 8位还原成ASCII 常能救回（如 0xF02D → '-'）
+  t=t.replace(/[\uF000-\uF0FF]/g,c=>String.fromCharCode(c.charCodeAt(0)&0xFF));
+  t=t.replace(/[\f\r]/g," ").replace(OPT_TAIL,"");
+  t=t.replace(/\[Turn over/gi,"").replace(/\s{2,}/g," ").trim();
+  return t;
+}
+/* 从判分细则文本里抽官方答案。
+   格式高度统一：「官方答案 D」/「Answer: C」。必须排除解答题误判——
+   解答题的 ms 里会出现 "A1/M1/OE" 这类分值标记，或正文里的孤立字母，
+   若不排除会把解答题错当选择题，学生点一下就可能被判错。
+   判定：题干含 Show that/State that/Explain 等解答动词 → 不是选择题。*/
+const ESSAY_RE=/(Show\s+that|Explain|Write\s+down|State\s+that|Hence|hence|Describe|Complete\s+the|Both\s+of)/i;
+function objectiveAnswer(q){
+  if(!q[7]||Object.keys(q[7]).length<3)return null;
+  const stem=q[5]||"";
+  if(ESSAY_RE.test(stem))return null;                 // 解答题误判，排除
+  const ms=q[6];
+  const txt=(Array.isArray(ms)?ms.join(" "):(ms||""));
+  if(!txt||txt.length>40)return null;                // 过长的是判分细则正文，不是简答标记
+  const m=txt.match(/(?:官方答案|答案|Answer)\s*[:：]?\s*([A-H])(?![A-Za-z])/);
+  if(!m)return null;
+  const k=m[1];
+  if(!q[7][k])return null;                            // 答案字母不在选项里 = 误判
+  return k;
 }
 
 /* ---------- 题目渲染 / 作答 ---------- */
+/* 题干里是否存在「真正的公式」。
+   不能只看有没有 $ —— OCR 常把图形结构拍平成孤立标点串，如
+   "…\n%\n$\n&\n$…"（EDXIALFP1 实测 20+ 题），这种 $ 内没有任何
+   LaTeX 结构，交给 KaTeX 只会渲染出红色报错块。
+   判据：$...$ / \[...\] / \(...\) 内至少含一处真正的数学结构。*/
+function hasRealFormula(t){
+  if(!t)return false;
+  const segs=[];
+  let m;
+  const rx=/\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$(?!\s)((?:\\.|[^$\\])+?)\$/g;
+  while((m=rx.exec(t)))segs.push(m[1]??m[2]??m[3]??m[4]??"");
+  if(segs.some(s=>/\\[a-zA-Z]|[_^]|\\[a-zA-Z]{2,}/.test(s)&&/[a-zA-Z0-9]/.test(s)))return true;
+  // 无定界符但有裸的 \frac \sqrt \int 等 LaTeX 命令
+  return /\\(frac|sqrt|int|begin|theta|pi|sqrt|cdot|times|leq|geq|leqslant)\b/.test(t);
+}
+/* 题干里「纯标点/孤立符号」行占比 —— OCR 噪声的强度指标。
+   正常题干也会有 "?" "!" 这类行，所以阈值放到 0.5 且只看多行碎片。*/
+function noiseRatio(t){
+  if(!t)return 0;
+  const lines=t.split("\n").filter(x=>x.trim());
+  if(lines.length<6)return 0;
+  const junk=lines.filter(x=>{
+    const s=x.trim();
+    // 去掉数学符号与数字后若还剩字母，说明是正常文字
+    return /^[^\w一-龥]*$/.test(s)&&/[!"#%&'´`^~¬]/.test(s);
+  }).length;
+  return junk/lines.length;
+}
+
 function renderQ(){
   if(!STU||!DATA){$("#qbox").innerHTML=`<div class="card hint">先选单元、${API.mode==="local"?"填学生姓名点「开始」":"登录后自动开始"}。</div>`;return;}
   const rec=ADV&&ADV.length?ADV[0]:null;
@@ -1061,9 +1230,45 @@ function renderQ(){
   const hasImg=q[8]&&q[8].length, hasMs=q[9]&&q[9].length;
   const topicName=cleanTopic(tOf[q[1]]||q[1]);
   const source=sourceText(q[10]);
-  const stemBlock = hasImg
-    ? figBlock(q[8],"原卷","点击图片可放大 · 以原卷截图为准")
-    : `<div class="stem${showRaw?" raw":""}" id="stem">${esc(q[5])}</div>${optBlock(q)}`;
+  /* 题干展示按「数据质量」分流，不能一刀切。
+     背景：原实现是「有截图就只渲染图」，11216/12030 题（93%）的文本被丢弃，
+     移动端要先缩放整页 A4 才看得见题干。但全库实测 96% 的文本是 OCR 碎片
+     （上标拍平成 x2、公式被拆成逐行单字符），直接铺出来比看图更难读。
+     所以分三种情况：
+       1. 题干带 LaTeX 定界符（TMUA 为主，308/360）→ 文本为主，截图折叠；
+       2. 题干含 LaTeX 且不碎（公式已排好）→ 同上；
+       3. OCR 碎片 → 截图为主（看得清），文本折叠成辅助，避免先读一屏乱码。
+
+     判据不能只看「有没有 $」：EDXIALFP1 部分题的 $ 本身就是 OCR 噪声
+     （公式被拍平成 % $ & $ 这种孤立标点串），只看 $ 会把它们误判成
+     「有 LaTeX」而走文本主显，屏幕上就是一堆红色报错块。
+     故改为看**有效公式**：$...$ / \[...\] 里必须有真正的 LaTeX 结构
+     （反斜杠命令、上下标、运算符、^2、_1 等），纯标点/空白不算。*/
+  const raw=(q[5]||"").trim();
+  const hasText=raw.length>0;
+  const hasTex=hasRealFormula(raw);
+  const lines=hasText?raw.split("\n").filter(x=>x.trim()):[];
+  const fragRatio=lines.length?lines.filter(x=>x.trim().length<=2).length/lines.length:0;
+  // 有真公式的题即使行数多也不算碎片（TMUA 的 cases/align 会跨很多行）
+  const shredded=hasText&&(!hasTex&&fragRatio>0.55||noiseRatio(raw)>0.5);
+  const textAsMain=hasText&&!shredded;
+  const foldBox=(cls,label,inner)=>`<details class="${cls}"><summary>${label}</summary>${inner}</details>`;
+  let stemBlock;
+  if(textAsMain){
+    stemBlock=`<div class="stem${showRaw?" raw":""}" id="stem">${esc(q[5])}</div>${optBlock(q)}`
+      +(hasImg?foldBox("figfold","查看原卷截图（核对用）",
+          figBlock(q[8],"原卷","点击图片可放大 · 以原卷截图为准")):"");
+  }else if(shredded){
+    // 碎片文本：给一个空的 #stem 保住公式渲染入口与DOM 结构，正文走截图
+    stemBlock=`<div class="stem hide" id="stem"></div>`
+      +figBlock(q[8]||[],"原卷","点击图片可放大 · 以原卷截图为准")
+      +(hasImg?foldBox("txtfold","查看文字版（OCR 有缺字，以原卷图为准）",
+          `<div class="stem raw" style="display:block">${esc(q[5])}</div>${optBlock(q)}`):"");
+  }else{
+    stemBlock=`<div class="stem${showRaw?" raw":""}" id="stem">${esc(q[5])}</div>${optBlock(q)}`
+      +(hasImg?foldBox("figfold","查看原卷截图（核对用）",
+          figBlock(q[8],"原卷","点击图片可放大 · 以原卷截图为准")):"");
+  }
   $("#qbox").innerHTML=`
   <div class="card">
     <div class="qhead">
@@ -1081,7 +1286,7 @@ function renderQ(){
       <button class="btn ok" data-s="1">✓ 做对了</button>
       <button class="btn" data-s="0.5">◑ 部分对</button>
       <button class="btn no" data-s="0">✗ 做错了</button>
-      <button class="btn no" data-s="0">没做完</button>
+      <button class="btn no" data-s="0" data-err="time">没做完</button>
     </div>
     <div class="selfrow">
       <button class="btn ghost" id="noMs">${hasMs?"看判分细则（截图）":"看判分细则"}</button>
@@ -1092,10 +1297,43 @@ function renderQ(){
   </div>`;
   renderMath();
   const qfigs=$("#qbox .qfigs"); if(qfigs)bindLb(qfigs,q[8],"原卷截图");
+  /* 客观题：点选项即自动判分并提交。
+     答对 → score 1；答错 → score 0 且仍要求选错因（保留错因数据的价值）。
+     自评按钮对客观题隐藏，避免"系统已判分还让人自评"的逻辑冲突。*/
+  const autoAns=objectiveAnswer(q);
+  if(autoAns){
+    $("#cause").innerHTML=`<div class="hint">客观题已自动判分，无需自评</div>`;
+    $("#qbox").querySelectorAll("button[data-s],#noMs").forEach(b=>b.classList.add("hide"));
+    $("#qbox").querySelectorAll(".opt").forEach(b=>b.onclick=()=>{
+      const pick=b.dataset.k, ok=pick===autoAns;
+      $("#qbox").querySelectorAll(".opt").forEach(x=>{
+        x.classList.remove("on","good","bad");
+        if(x.dataset.k===autoAns)x.classList.add("good");
+        else if(x.dataset.k===pick)x.classList.add("bad");
+      });
+      b.onclick=null;
+      CURREP=ok?1:0;
+      if(ok){
+        CUR.err=null; commit();
+      }else{
+        // 答错仍走错因选择，保持错因统计口径一致
+        $("#cause").innerHTML=`<div class="rowlbl">错因（必填）</div>
+          <div class="chips">${ERRS.map(e=>`<button class="chip" data-e="${e[0]}">${e[1]}</button>`).join("")}</div>
+          <div class="hint">正确答案已标绿</div>`;
+        $("#cause").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
+          $("#cause").querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===c));
+          CUR.err=c.dataset.e; commit();});
+      }
+    });
+  }
   $("#qbox").querySelectorAll("button[data-s]").forEach(b=>b.onclick=()=>{
     const s=parseFloat(b.dataset.s);
+    /* 「没做完」预置错因 time（时间不够），与「做错了」区分开：
+       二者补救方向不同（前者练速度、后者重概念），合流会让错因统计失真。
+       ERRS 里本就有 ["time","没做完"] 这一项。*/
+    const pre=b.dataset.err;
     if(s<1){ $("#cause").innerHTML=`<div class="rowlbl">错因（必填）</div>
-      <div class="chips">${ERRS.map(e=>`<button class="chip" data-e="${e[0]}">${e[1]}</button>`).join("")}</div>`;
+      <div class="chips">${ERRS.map(e=>`<button class="chip${pre===e[0]?" on":""}" data-e="${e[0]}">${e[1]}</button>`).join("")}</div>`;
       $("#cause").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
         $("#cause").querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===c));
         CURREP=s; CUR.err=c.dataset.e; commit();});
@@ -1103,7 +1341,24 @@ function renderQ(){
   });
   $("#noMs").onclick=()=>{
     const box=$("#msbox");
-    if(!box.classList.contains("hide")){box.classList.add("hide");return}
+    /* 判分细则里就是官方答案，作答前点开等于把答案摊在题面上：
+       自评随即变成"照着答案点做对了/做错了"，Elo 能力分被系统性污染。
+       故未提交自评时只提示、不展开。作答后请用反馈页里的「看判分细则」——
+       commit() 会重写 #qbox，本按钮随之消失。*/
+    if(CURREP===null){
+      toast("先完成自评，提交后可在结果页看判分细则");
+      return;
+    }
+    const btn=$("#noMs");
+    if(!box.classList.contains("hide")){
+      box.classList.add("hide");
+      btn.textContent=hasMs?"看判分细则（截图）":"看判分细则";  // 收起后按钮文案要跟着回，否则看不出状态
+      btn.setAttribute("aria-expanded","false");
+      return;
+    }
+    box.classList.remove("hide");
+    btn.textContent="收起判分细则";
+    btn.setAttribute("aria-expanded","true");
     box.classList.remove("hide");
     box.innerHTML=`<div class="rowlbl" style="margin-top:0">判分细则</div>
       ${hasMs?`<div class="msnote">官方判分细则截图 · 点击放大</div>
@@ -1121,20 +1376,68 @@ function renderQ(){
       else ADV.shift();
       CUR=null;
     } else ADV.shift();
+    saveRound();          // 跳过的题也不该在刷新后重新出现
     renderQ();
   };
 }
+/* 四种分隔符全覆盖：题库里 $$/$ 与 \[ \] 两种写法都在用（TMUA 尤其多），
+   少配一种就会让整段公式以源码形式漏出来。*/
+const MATH_DELIMS=[{left:"$$",right:"$$",display:true},{left:"\\[",right:"\\]",display:true},
+                  {left:"\\(",right:"\\)",display:false},{left:"$",right:"$",display:false}];
+
+/* 货币符号消歧：题库里存在 "to the nearest $10, by 27 people" 这类美元金额，
+   KaTeX 会把 $10, by 27 people 当成公式定界符，渲染成一团乱码并吞掉英文。
+   规则：$ 后紧跟数字，且该段落内 $ 总数为奇数（说明这个 $ 没有配对）→ 判定为货币，转义成 \$。
+   真正的公式如 $8.5$、$2x^2+...$ 都是成对的，不受影响。*/
+function escapeCurrency(txt){
+  if(!txt||txt.indexOf("$")<0)return txt;
+  const all=txt.match(/(?<!\\)\$/g);
+  if(!all||all.length%2===0)return txt;          // 成对 -> 交给 KaTeX
+  // 奇数：找出那个落单的 $（其后无配对 $），且其后紧跟数字/数字+逗号
+  const idx=[];
+  for(let i=0;i<txt.length;i++) if(txt[i]==="$"&&(i===0||txt[i-1]!=="\\"))idx.push(i);
+  let changed=false;
+  for(let k=0;k<idx.length;k+=2){                 // 按从左到右两两配对，末尾那个落单
+    if(k+1>=idx.length){
+      const p=idx[k], after=txt.slice(p+1);
+      if(/^\s?\d/.test(after)){                   // $10 / $ 30 000 形态
+        txt=txt.slice(0,p)+"\\$"+txt.slice(p+1); changed=true;
+      }
+    }
+  }
+  return changed?txt:txt;
+}
 function renderMathIn(root){
-  if(!window.renderMathInElement)return;
-  try{renderMathInElement(root,{delimiters:[{left:"$$",right:"$$"},{left:"$",right:"$"}],
+  if(!window.renderMathInElement||!root)return;
+  preEscapeCurrency(root);
+  try{renderMathInElement(root,{delimiters:MATH_DELIMS,
     throwOnError:false,ignoredTags:["script","style"],errorColor:"#f08076"});}catch(e){}
+}
+function preEscapeCurrency(root){
+  const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null);
+  const nodes=[]; let n;
+  while((n=w.nextNode()))nodes.push(n);
+  for(const nd of nodes){
+    const t=nd.nodeValue; if(!t||t.indexOf("$")<0)continue;
+    const fixed=escapeCurrency(t);
+    if(fixed!==t)nd.nodeValue=fixed;
+  }
 }
 function renderMath(){
   if(showRaw||!window.renderMathInElement)return;
-  const el=$("#stem"); if(!el)return;
-  try{renderMathInElement(el,{delimiters:[{left:"$$",right:"$$"},{left:"$",right:"$"}],
-    throwOnError:false,ignoredTags:["script","style"],errorColor:"#f08076"});}
-  catch(e){el.textContent=el.textContent}
+  const box=$("#qbox"); if(!box)return;
+  // 之前只渲染 #stem，选项区/判分细则里的 $...$ 全部漏成源码
+  const el=$("#stem");
+  if(el){preEscapeCurrency(el);
+    try{renderMathInElement(el,{delimiters:MATH_DELIMS,
+      throwOnError:false,ignoredTags:["script","style"],errorColor:"#f08076"});}
+    catch(e){el.textContent=el.textContent}}
+  box.querySelectorAll(".opts,.ms").forEach(n=>renderMathIn(n));
+  // 折叠区里的公式也要能渲染：学生展开「文字版」时不该看到裸源码
+  box.querySelectorAll("details").forEach(d=>{
+    if(d.open)renderMathIn(d);
+    else d.addEventListener("toggle",function(){if(d.open)renderMathIn(d);});
+  });
 }
 function commit(){
   if(CURREP===null)return;
@@ -1144,6 +1447,10 @@ function commit(){
   const entry={aid:aid,qid:CUR.qid,topic:CUR.topic,score:CURREP,secs:secs,
                why:CUR.why,err:CUR.err||null,ts:Date.now(),D:CUR.D};
   STU.log.push(entry);
+  // 错因也要进汇总表：stats() 的「主要错因」与薄弱点页的「错因集中→开处方」
+  // 都读的是 STU.errs，而此前只有服务端同步路径(mergeFromServer)会填它，
+  // 于是离线练习/直接双击打开时错因全丢，那套诊断逻辑等于从未生效。
+  if(CUR.err)STU.errs.push(CUR.err);
   const before=rating(CUR.topic);
   upd(CUR.topic,CUR.D,CURREP,secs);
   saveStu();
@@ -1163,6 +1470,9 @@ function commit(){
   }
   const after=rating(CUR.topic);
   ADV.shift();
+  // 队列在 shift 之后才落盘：saveStu() 里的 saveRound() 若早于 shift，
+  // 保存的队列仍包含刚做完的题，刷新后会重复做一遍。
+  saveRound();
   const delta=Math.round(after-before);
   $("#qbox").innerHTML=`<div class="card">
     <div class="lbl">已记录</div>
@@ -1180,7 +1490,33 @@ function commit(){
       <button class="btn pri" id="next">下一题 →</button>
       <button class="btn ghost" id="done">结束本轮</button>
     </div>
+    <div id="fbMs" class="hide"></div>
   </div>`;
+  /* 作答后才允许看判分细则 —— 这正是引入拦截时容易漏掉的一半：
+     只在题面拦、不在反馈页放开的话，功能会变成任何时候都打不开的死按钮
+     （反馈页原本只渲染 #next/#done）。学生核对答案的时机恰恰在这里。
+     注意：commit() 作用域里没有 q（q 是 renderQ 的局部变量），要用 qBy(CUR.qid) 取。*/
+  const fq=qBy(CUR.qid);
+  const hasMsImg=!!(fq&&fq[9]&&fq[9].length), hasMsTxt=!!(fq&&fq[6]&&!hasMsImg);
+  if(hasMsImg||hasMsTxt){
+    const row=document.createElement("div");
+    row.className="selfrow";row.style.marginTop="12px";
+    row.innerHTML=`<button class="btn ghost" id="fbNoMs">${
+      hasMsImg?"看官方判分细则（截图）":"看判分细则"}</button>`;
+    $("#qbox .card").appendChild(row);
+    $("#fbNoMs").onclick=()=>{
+      const box=$("#fbMs");
+      if(!box.classList.contains("hide")){box.classList.add("hide");
+        $("#fbNoMs").textContent=hasMsImg?"看官方判分细则（截图）":"看判分细则";return}
+      box.classList.remove("hide");
+      $("#fbNoMs").textContent="收起判分细则";
+      box.innerHTML=`<div class="rowlbl" style="margin-top:0">判分细则</div>`
+        +(hasMsImg?`<div class="msnote">官方判分细则截图 · 点击放大</div>${figBlock(fq[9],"判分细则","")}`
+          :`<div class="ms">${esc(fq[6])}</div>`);
+      const mf=box.querySelector(".qfigs"); if(mf)bindLb(mf,fq[9],"判分细则截图");
+      if(!hasMsImg)renderMathIn(box);
+    };
+  }
   $("#next").onclick=()=>{$("#qbox").innerHTML=""; renderQ();
     const el=document.getElementById("pracTop"); if(el)el.scrollIntoView({block:"start"});};
   $("#done").onclick=()=>{ADV=[];stats();Q_end()};
@@ -1271,20 +1607,42 @@ $("#meClear").onclick=()=>{if(!STU)return;
 /* ---------- 教师端 ---------- */
 async function renderRoster(){
   const t=$("#stuTable");
-  t.innerHTML="<tr><th>学生</th><th class='num'>累计题数</th><th class='num'>正确率</th><th class='num'>已练知识点</th><th class='num'>可评估</th></tr><tr><td colspan=5 class='hint'>加载中…</td></tr>";
+  const HDR="<tr><th>学生</th><th class='num'>累计题数</th><th class='num'>正确率</th>"
+    +"<th>最近练习</th><th>需补知识点（最弱3项）</th></tr>";
+  t.innerHTML=HDR+"<tr><td colspan=5 class='hint'>加载中…</td></tr>";
   try{
     const list=await api("/api/students");
-    const exp=await api("/api/export?light=1");
-    t.innerHTML="<tr><th>学生</th><th class='num'>累计题数</th><th class='num'>正确率</th><th class='num'>已练知识点</th><th class='num'>可评估</th></tr>"
-      + list.map(s=>{const e=exp.all&&exp.all[s.name]||{};
-        const ab=e.ability||[];
-        return `<tr><td>${esc(s.name)}</td><td class='num'>${s.n}</td>
-          <td class='num'>${s.n?Math.round(s.acc)+"%":"—"}</td>
-          <td class='num'>${ab.length}</td>
-          <td class='num'>${ab.filter(x=>x.reliable).length}</td></tr>`;}).join("")
-      ||"<tr><td colspan=5 class='hint'>还没有学生数据</td></tr>";
-    if(!list.length)t.innerHTML="<tr><td colspan=5 class='hint'>还没有学生数据</td></tr>";
-  }catch(e){t.innerHTML=`<tr><td colspan=5 class="hint">加载失败：${esc(e.message)}</td></tr>`}
+    /* 空态判断原本写成 `表头 + list.map().join('') || '还没有学生数据'`：
+       前半段恒为非空字符串，`||` 永远不触发，空列表时靠下面那句 if 兜住 ——
+       逻辑重复且极易被后人误删。这里只留一处明确的空态分支。*/
+    if(!list||!list.length){
+      t.innerHTML=HDR+"<tr><td colspan=5 class='hint'>还没有学生数据</td></tr>";
+      const pu=$("#paperStu");
+      if(pu)pu.innerHTML='<option value="">— 花名册为空 —</option>';
+      return;
+    }
+    // 顺带填好出卷用的学生下拉：此前 JS 引用 #paperStu 但 HTML 里没这个元素，
+    // 只能靠 prompt 兜底；这里复用已取到的花名册，不额外发请求。
+    const pu=$("#paperStu");
+    if(pu){
+      const keep=pu.value;
+      pu.innerHTML='<option value="">— 选择学生 —</option>'
+        +list.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}（${s.n}题）</option>`).join("");
+      if(keep&&list.some(s=>s.name===keep))pu.value=keep;
+    }
+    const day=s=>{ if(!s)return"—";
+      const d=new Date(s.replace(" ","T")+(/Z$/.test(s)?"":""));
+      if(isNaN(d))return esc(s);
+      const diff=Math.floor((Date.now()-d.getTime())/864e5);
+      return diff<=0?"今天":diff===1?"昨天":diff<30?diff+" 天前":esc(s.slice(0,10));};
+    t.innerHTML=HDR+list.map(s=>{
+      const weak=(s.weak||[]).map(w=>`<span class="pill warn" title="能力分 ${w.elo}（作答 ${w.n} 次）">${esc(w.name)}</span>`).join(" ");
+      return `<tr><td>${esc(s.name)}</td><td class='num'>${s.n}</td>
+        <td class='num'>${s.n?Math.round(s.acc)+"%":"—"}</td>
+        <td class='hint'>${day(s.last)}</td>
+        <td>${weak||(s.n?`<span class="hint">暂无足够作答</span>`:`<span class="hint">未开始</span>`)}</td></tr>`;
+    }).join("");
+  }catch(e){t.innerHTML=HDR+`<tr><td colspan=5 class="hint">加载失败：${esc(e.message)}</td></tr>`}
 }
 async function renderHeat(){
   const box=$("#heat");
@@ -1298,18 +1656,35 @@ async function renderHeat(){
     names.forEach(n=>{(d.all[n].ability||[]).forEach(a=>{
       if(!T[a.topic])T[a.topic]={name:a.name,ch:a.chapter,by:{}};
       T[a.topic].by[n]=a;})});
-    const rows=Object.entries(T).sort((a,b)=>(a[1].ch||"").localeCompare(b[1].ch||"")
-      ||a[1].name.localeCompare(b[1].name)).slice(0,60);
+    const all=Object.entries(T).sort((a,b)=>(a[1].ch||"").localeCompare(b[1].ch||"")
+      ||a[1].name.localeCompare(b[1].name)||a[0].localeCompare(b[0]));
+    const rows=all.slice(0,60);
+    // 同名知识点消歧：库里有 52 个知识点都叫「综合题」，只显示名字的话
+    // 半行完全无法区分（实测热力图 10 行里5 行同名），等于把诊断信息变成噪声。
+    // 追加 topic_id 尾段做区分标识。
+    const dupName={};
+    all.forEach(([tid,t])=>{dupName[t.name]=(dupName[t.name]||0)+1});
+    const label=(tid,t)=>{
+      const short=tid.replace(/^(RAWGAP-|RAW\d+-)/,"").replace(/^.*?_Q/,"");
+      return dupName[t.name]>1
+        ? `${esc(t.name)}<div class="hint" style="font-size:11px">${esc(t.ch||"")} · ${esc(short)}</div>`
+        : `${esc(t.name)}<div class="hint" style="font-size:11px">${esc(t.ch||"")}</div>`;
+    };
     let h="<table><tr><th>知识点</th>"+names.map(n=>`<th class="num">${esc(n)}</th>`).join("")+"</tr>";
     for(const [tid,t] of rows){
-      h+=`<tr><td>${esc(t.name)}<div class="hint" style="font-size:11px">${esc(t.ch||"")}</div></td>`
+      h+=`<tr><td>${label(tid,t)}</td>`
         +names.map(n=>{const a=t.by[n];if(!a)return`<td class="num" style="color:var(--tx3)">—</td>`;
-          if(!a.reliable)return`<td class="num" style="color:var(--tx3)">${a.n}次</td>`;
+          /* 样本不足时不再只显示「N次」把分数藏起来 —— 那样整张表在真实数据下
+             一格颜色都不上（无人达到 SHOW_AT=15），热力图退化成纯数字灰表。
+             改为分数+淡化+角标，保留判断依据同时明确可信度。*/
+          if(!a.reliable)return`<td class="num" style="color:var(--tx3)" title="作答 ${a.n} 次，未达 ${SHOW_AT} 次可信阈值">${a.elo}<span style="font-size:10px;opacity:.7">·${a.n}次</span></td>`;
           const c=a.elo<950?"var(--red)":a.elo<1100?"var(--amber)":"var(--mint)";
           return`<td class="num" style="color:${c};font-weight:650">${a.elo}</td>`;}).join("")+"</tr>";
     }
-    box.innerHTML=h+"</table><div class='hint' style='margin-top:10px'>未达 "+SHOW_AT+
-      " 次作答的显示次数而非分数；分数上色：红 &lt;950 / 黄 &lt;1100 / 绿 ≥1100。</div>";
+    box.innerHTML=h+"</table>"
+      +`<div class='hint' style='margin-top:10px'>数字后的「·N次」表示作答次数不足 ${SHOW_AT}，`
+      +`分数仅供参考（灰显）；达到 ${SHOW_AT} 次后按分数上色：红 &lt;950 / 黄 &lt;1100 / 绿 ≥1100。</div>`
+      +(all.length>60?`<div class='hint'>知识点共 ${all.length} 个，已按章节排序显示前 60 个。</div>`:"");
   }catch(e){box.innerHTML=`<div class="hint">加载失败：${esc(e.message)}</div>`}
 }
 async function renderRecent(){
@@ -1340,8 +1715,25 @@ $("#expAll").onclick=async()=>{
   }catch(e){alert("导出失败："+e.message)}
 };
 $("#paper").onclick=async()=>{
-  const name=prompt("为哪位学生生成专项练习？");if(!name)return;
-  const unit=$("#unitSel").value||"";
+  /* 这里曾读$("#unitSel").value —— 但 #unitSel 在学生练习面板里，
+     教师端看不见也改不了，拿到的是上轮学生练习残留的 localStorage。
+     结果「薄弱点专项练习」被静默筛成某一单元的随机卷：
+     实测 5 个最弱知识点被压成 1 个，最弱的 4 个一题不出。
+     改为只读教师端自己的 #paperUnit（默认空=不筛选）。*/
+  const nm=$("#paperStu");
+  let name=nm&&nm.value?nm.value.trim():"";
+  if(!name){
+    // 下拉没选才回退到 prompt（花名册为空、或下拉尚未填充的情况）
+    try{
+      const rows=await api("/api/students");
+      if(rows&&rows.length){
+        toast("请先在上方「学生」下拉里选择，或点「刷新」载入花名册");
+        return;
+      }else name=prompt("为哪位学生生成专项练习？（花名册为空）");
+    }catch(e){ name=prompt("为哪位学生生成专项练习？"); }
+    if(!name||!name.trim())return;
+  }
+  const unit=($("#paperUnit")&&$("#paperUnit").value)||"";
   try{
     const url=`/api/quiz?name=${encodeURIComponent(name)}&unit=${encodeURIComponent(unit)}&n=20&token=${encodeURIComponent(API.tok)}`;
     window.open(url,"_blank");
@@ -1377,8 +1769,13 @@ window.addEventListener("online",()=>flushQueue());
   if(!me||!me.role||API.forceLogin){
     if(API.tok&&!me){API.tok="";localStorage.removeItem("mathbank:token")}
     if(me&&!me.role&&API.tok){API.tok="";localStorage.removeItem("mathbank:token")}
-    if((location.protocol==="file:"||!me)&&!API.forceLogin){
-      enterLocal();                       // 双击打开 / 服务不在 → 本机离线模式（无教师面板）
+    /* 服务在线但没有 token（me={role:null}）时，若本机已存在离线身份，
+       直接恢复它，而不是又弹登录框让学生重走一遍。
+       原实现把「没登录」和「本机离线」当成同一种情况，结果刷新页面
+       就丢轮次进度、还要重新点「离线练习」。*/
+    const hadLocal=!!localStorage.getItem("mathbank:current");
+    if((location.protocol==="file:"||!me||!API.tok)&&!API.forceLogin&&hadLocal){
+      enterLocal();// 本机离线模式（无教师面板）
       return;
     }
     openLogin();
