@@ -719,7 +719,20 @@ $("#logout").onclick=async()=>{
    之前 boot() 只要看到 mathbank:current 就进离线模式，把登录界面整个吃掉，
    导致教师根本进不去 —— 这个按钮是那次的直接补救。
    离线模式（local）下切身份没有意义（无教师面板），所以直接跳登录框。*/
-$("#switchMode").onclick=()=>{
+/*「切换身份」：随时回到登录界面重选学生端/教师端。
+   用户反馈原本只有题旁一个改名字的输入框，无法查看全班成绩（教师端）。
+   之前 boot() 只要看到 mathbank:current 就进离线模式，把登录界面整个吃掉，
+   导致教师根本进不去 —— 这个按钮是那次的直接补救。
+
+   必须同时清 token：否则界面虽回到登录框（看着正常），但一刷新
+   boot() 拿残留 token 调 /api/me 成功，又把旧身份自动拉回来、
+   直接跳过登录界面 —— 教师就永远切不走。logout/switchRole 两处
+   都清了 token，这里曾漏掉（验收 agent 独立发现）。*/
+$("#switchMode").onclick=async()=>{
+  try{await fetch("/api/logout",{method:"POST",
+    headers:{"Authorization":"Bearer "+API.tok}})}catch(e){}
+  API.tok="";API.role=null;API.name=null;
+  localStorage.removeItem("mathbank:token");
   localStorage.removeItem("mathbank:localMode");
   API.forceLogin=true;
   openLogin();
@@ -1184,8 +1197,15 @@ function stats(){
     <div class="c"><div class="lbl">正确率</div><div class="v">${acc}%</div></div>
     <div class="c"><div class="lbl">主要错因</div><div class="v" style="font-size:15px">${
       topErr?(ERRS.find(e=>e[0]===topErr[0])||[0,topErr[0]])[1]:"—"}</div></div>`;
+  /* 徽标要同时说清「存在哪」和「存在多少」：此前只写 "已保存 N 条"，
+     离线模式下会被读成已同步到服务器，实际并没有。加身份前缀避免误解
+     （验收 agent 发现：离线练习后被残留 token 拉回服务端会话时，
+      徽标仍写"本地实时记录"，语义自相矛盾）。*/
   const badge=$("#storageBadge");
-  if(badge)badge.textContent=`已保存 ${lg.length} 条`;
+  if(badge){
+    const where=(API.mode==="server")?"云端已同步":(API.mode==="local"?"本机离线":"");
+    badge.textContent=where?`${where} · 已保存 ${lg.length} 条`:`已保存 ${lg.length} 条`;
+  }
 }
 /* 选项从纯展示改为可作答：此前是<div class="opt">，点击无任何反应，
    522 道客观题全部退化为「纯自评」——系统拿不到作答数据，Elo 全靠自评可信度。
