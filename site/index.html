@@ -1283,15 +1283,24 @@ function renderQ(){
       ${source?`<span>·</span><span>${esc(source)}</span>`:""}</div>
     ${stemBlock}
     <div class="sep"></div>
-    <div class="rowlbl">自评（解答题需自评；选「部分对/做错/没做完」须填错因）</div>
+    /* 自评按钮按「你真正能判断的东西」设计。
+       原实现是「做对了 / 部分对 / 做错了」，但解答题没有答案，
+       学生根本无从判断 —— 只能瞎选，于是能力分与薄弱点分析全被污染
+       （用户 2026-10-08 指出：「我没看答案怎么知道做对还是做错」）。
+       改为问「独立做到哪一步」，这是写完就能确定的、不需要看答案的事实：
+         独立想出了完整方案 → 能力分给高分（相当于自评 1）
+         有思路但卡住 / 只列出式子 → 中等（相当于 0.5）
+         完全没思路 / 只抄题 → 低分（相当于 0）
+       「没做完」单独保留（时间不够，补救方向不同）。*/
+    <div class="rowlbl">${optBlock(q)&&objectiveAnswer(q)?"":"做题后自评"}（按你实际做到哪一步选，不用看答案）</div>
     <div class="selfrow">
-      <button class="btn ok" data-s="1">✓ 做对了</button>
-      <button class="btn" data-s="0.5">◑ 部分对</button>
-      <button class="btn no" data-s="0">✗ 做错了</button>
-      <button class="btn no" data-s="0" data-err="time">没做完</button>
+      <button class="btn ok" data-s="1">✓ 独立想出了完整解法</button>
+      <button class="btn" data-s="0.5">◑ 有思路但没做完</button>
+      <button class="btn no" data-s="0">✗ 没思路 / 只抄了题</button>
+      <button class="btn no" data-s="0" data-err="time">时间不够没写完</button>
     </div>
     <div class="selfrow">
-      <button class="btn ghost" id="noMs">${hasMs?"看判分细则（截图）":"看判分细则"}</button>
+      <button class="btn ghost" id="noMs">${hasMs?"看判分细则（对照答案）":"看判分细则"}</button>
       <button class="btn ghost" id="skip">跳过本题</button>
     </div>
     <div id="cause"></div>
@@ -1330,9 +1339,9 @@ function renderQ(){
   }
   $("#qbox").querySelectorAll("button[data-s]").forEach(b=>b.onclick=()=>{
     const s=parseFloat(b.dataset.s);
-    /* 「没做完」预置错因 time（时间不够），与「做错了」区分开：
-       二者补救方向不同（前者练速度、后者重概念），合流会让错因统计失真。
-       ERRS 里本就有 ["time","没做完"] 这一项。*/
+    /* 「时间不够没写完」预置错因 time，与「没思路」区分开：
+     二者补救方向不同（前者练速度、后者重概念），合流会让错因统计失真。
+     ERRS 里本就有 ["time","没做完"] 这一项。*/
     const pre=b.dataset.err;
     if(s<1){ $("#cause").innerHTML=`<div class="rowlbl">错因（必填）</div>
       <div class="chips">${ERRS.map(e=>`<button class="chip${pre===e[0]?" on":""}" data-e="${e[0]}">${e[1]}</button>`).join("")}</div>`;
@@ -1478,7 +1487,7 @@ function commit(){
   const delta=Math.round(after-before);
   $("#qbox").innerHTML=`<div class="card">
     <div class="lbl">已记录</div>
-    <div class="fb-line">本题：<b>${CURREP===1?"正确":CURREP===0.5?"部分正确":"错误"}</b>
+    <div class="fb-line">本题自评：<b>${CURREP===1?"独立想出了完整解法":CURREP===0.5?"有思路但没做完":"没思路 / 只抄了题"}</b>
       ${CUR.err?` · 错因 <b>${(ERRS.find(e=>e[0]===CUR.err)||[0,CUR.err])[1]}</b>`:""}
       <span class="pill" style="margin-left:6px">用时 ${secs}s</span></div>
     <div class="hint">知识点「${esc(cleanTopic(tOf[CUR.topic]||CUR.topic))}」能力分 ${Math.round(before)} →
@@ -1490,34 +1499,75 @@ function commit(){
     <div class="sep"></div>
     <div class="row">
       <button class="btn pri" id="next">下一题 →</button>
+      <button class="btn ghost" id="fbNoMs">对照答案</button>
       <button class="btn ghost" id="done">结束本轮</button>
     </div>
+    <div class="hint" style="margin-top:9px">对照答案后如果发现自评高了或低了，可以改——这样能力分才准。</div>
+    <div id="fixRow"></div>
     <div id="fbMs" class="hide"></div>
   </div>`;
   /* 作答后才允许看判分细则 —— 这正是引入拦截时容易漏掉的一半：
-     只在题面拦、不在反馈页放开的话，功能会变成任何时候都打不开的死按钮
-     （反馈页原本只渲染 #next/#done）。学生核对答案的时机恰恰在这里。
+     只在题面拦、不在反馈页放开的话，功能会变成任何时候都打不开的死按钮。
+     学生核对答案的时机恰恰在这里，也是唯一合理的时机。
      注意：commit() 作用域里没有 q（q 是 renderQ 的局部变量），要用 qBy(CUR.qid) 取。*/
   const fq=qBy(CUR.qid);
   const hasMsImg=!!(fq&&fq[9]&&fq[9].length), hasMsTxt=!!(fq&&fq[6]&&!hasMsImg);
   if(hasMsImg||hasMsTxt){
-    const row=document.createElement("div");
-    row.className="selfrow";row.style.marginTop="12px";
-    row.innerHTML=`<button class="btn ghost" id="fbNoMs">${
-      hasMsImg?"看官方判分细则（截图）":"看判分细则"}</button>`;
-    $("#qbox .card").appendChild(row);
+    $("#fbNoMs").textContent=hasMsImg?"对照答案（官方细则截图）":"对照答案";
     $("#fbNoMs").onclick=()=>{
       const box=$("#fbMs");
       if(!box.classList.contains("hide")){box.classList.add("hide");
-        $("#fbNoMs").textContent=hasMsImg?"看官方判分细则（截图）":"看判分细则";return}
+        $("#fbNoMs").textContent=hasMsImg?"对照答案（官方细则截图）":"对照答案";return}
       box.classList.remove("hide");
-      $("#fbNoMs").textContent="收起判分细则";
-      box.innerHTML=`<div class="rowlbl" style="margin-top:0">判分细则</div>`
-        +(hasMsImg?`<div class="msnote">官方判分细则截图 · 点击放大</div>${figBlock(fq[9],"判分细则","")}`
+      $("#fbNoMs").textContent="收起答案";
+      box.innerHTML=`<div class="rowlbl" style="margin-top:0">${hasMsImg?"官方判分细则":"参考答案"}</div>`
+        +(hasMsImg?`<div class="msnote">点击图片可放大 · 判分按得分点给分</div>${figBlock(fq[9],"判分细则","")}`
           :`<div class="ms">${esc(fq[6])}</div>`);
       const mf=box.querySelector(".qfigs"); if(mf){bindLb(mf,fq[9],"判分细则截图");markTallFigs(mf);}
       if(!hasMsImg)renderMathIn(box);
+      // 展开答案后主动给出订正入口：自评是学生在没答案时给的估计，
+      // 对完答案才知道准不准。不让订正的话，能力分会一直带着这个偏差。
+      $("#fixRow").innerHTML=`<div class="rowlbl" style="margin-top:12px">对完答案，如果自评不准可以改</div>
+        <div class="selfrow">
+          <button class="btn ok" data-fix="1">我其实全对了</button>
+          <button class="btn" data-fix="0.5">只做对一部分</button>
+          <button class="btn no" data-fix="0">其实没做出来</button>
+        </div>
+        <div class="hint" style="margin-top:7px">改动会覆盖刚才的自评与能力分增量，让后续推荐更准。</div>`;
+      bindFix();
     };
+  }else{
+    $("#fbNoMs").style.display="none";
+  }
+  /* 订正自评：撤销旧记录、按新分数重算能力分。
+     只改本地记录并重画统计，不重复上报服务端 —— 服务端已有那条记录，
+     再发会造成同题两条 attempt。 */
+  function bindFix(){
+    if($("#fixRow").dataset.done)return;              // 幂等：只允许订正一次
+    $("#fixRow").querySelectorAll("[data-fix]").forEach(btn=>btn.onclick=()=>{
+      const ns=parseFloat(btn.dataset.fix);
+      const t=CUR.topic;
+      const old=STU.log[STU.log.length-1];
+      // 回退首次提交的计数与能力分，再按新分数重算
+      STU.n[t]=Math.max(0,(STU.n[t]||1)-1);
+      STU.elo[t]=before;
+      upd(t,CUR.D,ns,old?old.secs:secs);
+      if(old){
+        old.score=ns; old.fixed=1;
+        // 错因表里原来那条要撤掉再重填，否则同一次作答会累计两条
+        if(old.err){const i=STU.errs.indexOf(old.err); if(i>=0)STU.errs.splice(i,1);}
+        if(ns<1)old.err=old.err||"concept";
+        if(old.err)STU.errs.push(old.err);
+      }
+      saveStu();
+      $("#fixRow").dataset.done="1";
+      const cur=Math.round(rating(t)), d2=cur-Math.round(before);
+      toast(`自评已更新，能力分 ${delta>=0?"+":""}${delta} → ${d2>=0?"+":""}${d2}`);
+      stats();
+      $("#fixRow").innerHTML=`<div class="hint">已按新自评更新：能力分 ${Math.round(before)} → <b class="delta ${d2>=0?"up":"down"}">${cur}</b>
+        <span class="delta ${d2>=0?"up":"down"}">(${d2>=0?"+":""}${d2})</span></div>`;
+      $("#fbNoMs").style.display="none";
+    });
   }
   $("#next").onclick=()=>{$("#qbox").innerHTML=""; renderQ();
     const el=document.getElementById("pracTop"); if(el)el.scrollIntoView({block:"start"});};
