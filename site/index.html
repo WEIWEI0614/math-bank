@@ -166,6 +166,13 @@ padding-bottom:13px;border-bottom:1px dashed var(--line)}
 .fig{margin:0;background:#fff;border:1px solid rgba(255,255,255,.28);border-radius:13px;padding:7px;
 box-shadow:var(--shadow);position:relative;overflow:hidden}
 .fig img{display:block;max-width:100%;height:auto;border-radius:6px;cursor:zoom-in;background:#fff}
+/* 原卷扫描图高度差异极大（实测 444px 已裁好 vs 6698px 整页 A4）。
+   整页图直接铺出来，题目在整页里只占很小一块，字号被压到看不清；
+   但也不能裁 —— 实测内容几乎铺满整页（底部占92~100%），裁剪会切掉题目。
+   所以：限高到 68vh 让整页可见，同时保持点击放大（灯箱）看细节。*/
+.fig.figtall img{max-height:min(68vh,660px);width:auto;max-width:100%;margin:0 auto}
+.fig.figtall{background:#fbfbfb}
+.fig .figmore{font-size:11px;color:var(--tx3);text-align:center;padding:6px 0 1px}
 .fig .figtag{position:absolute;top:11px;right:13px;font-size:10.5px;background:rgba(14,15,18,.8);
 color:#d8d6d0;padding:3px 9px;border-radius:99px;letter-spacing:.5px;pointer-events:none}
 .figcap{font-size:11.5px;color:var(--tx3);margin-top:8px;text-align:center}
@@ -1031,11 +1038,36 @@ document.addEventListener("keydown",e=>{
 function figBlock(files,tag,cap){
   if(!files||!files.length)return"";
   return `<div class="qfigs">`+files.map((f,i)=>
-    `<figure class="fig" data-lb="${i}">
+    `<figure class="fig" data-lb="${i}" data-fig>
        <img src="data/${f}" loading="lazy" alt="${tag}">
        <span class="figtag">${tag}</span>
      </figure>`).join("")+
     (cap?`<div class="figcap">${cap}</div>`:"")+`</div>`;
+}
+/* 整页 A4 扫描图高度可达 6698px，直接铺出来题目字会被压到看不清。
+   实测内容几乎铺满整页（底部占92~100%），裁剪会切掉题目，所以只做限高
+   （68vh），细节靠点击放大（灯箱）查看。判定放在图片加载后，
+   因为加载前拿不到 naturalHeight。已裁好的小图（<900px）不加限制。*/
+function markTallFigs(root){
+  if(!root)return;
+  root.querySelectorAll("[data-fig] img").forEach(img=>{
+    const fit=()=>{
+      const box=img.closest(".fig");
+      if(!box||box.classList.contains("figtall"))return;
+      if(img.naturalHeight>Math.max(900,window.innerHeight*1.35)){
+        box.classList.add("figtall");
+        let tip=box.parentNode.querySelector(".figtalltip");
+        if(!tip&&box.parentNode){
+          tip=document.createElement("div");
+          tip.className="figcap figtalltip";
+          tip.textContent="整页原卷已缩放显示 · 点击图片可放大看细节";
+          box.parentNode.insertBefore(tip,box.nextSibling);
+        }
+      }
+    };
+    if(img.complete&&img.naturalHeight)fit();
+    else img.addEventListener("load",fit,{once:true});
+  });
 }
 function bindLb(root,files,tag){
   root.querySelectorAll(".fig").forEach(el=>{
@@ -1172,35 +1204,6 @@ function objectiveAnswer(q){
 }
 
 /* ---------- 题目渲染 / 作答 ---------- */
-/* 题干里是否存在「真正的公式」。
-   不能只看有没有 $ —— OCR 常把图形结构拍平成孤立标点串，如
-   "…\n%\n$\n&\n$…"（EDXIALFP1 实测 20+ 题），这种 $ 内没有任何
-   LaTeX 结构，交给 KaTeX 只会渲染出红色报错块。
-   判据：$...$ / \[...\] / \(...\) 内至少含一处真正的数学结构。*/
-function hasRealFormula(t){
-  if(!t)return false;
-  const segs=[];
-  let m;
-  const rx=/\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$(?!\s)((?:\\.|[^$\\])+?)\$/g;
-  while((m=rx.exec(t)))segs.push(m[1]??m[2]??m[3]??m[4]??"");
-  if(segs.some(s=>/\\[a-zA-Z]|[_^]|\\[a-zA-Z]{2,}/.test(s)&&/[a-zA-Z0-9]/.test(s)))return true;
-  // 无定界符但有裸的 \frac \sqrt \int 等 LaTeX 命令
-  return /\\(frac|sqrt|int|begin|theta|pi|sqrt|cdot|times|leq|geq|leqslant)\b/.test(t);
-}
-/* 题干里「纯标点/孤立符号」行占比 —— OCR 噪声的强度指标。
-   正常题干也会有 "?" "!" 这类行，所以阈值放到 0.5 且只看多行碎片。*/
-function noiseRatio(t){
-  if(!t)return 0;
-  const lines=t.split("\n").filter(x=>x.trim());
-  if(lines.length<6)return 0;
-  const junk=lines.filter(x=>{
-    const s=x.trim();
-    // 去掉数学符号与数字后若还剩字母，说明是正常文字
-    return /^[^\w一-龥]*$/.test(s)&&/[!"#%&'´`^~¬]/.test(s);
-  }).length;
-  return junk/lines.length;
-}
-
 function renderQ(){
   if(!STU||!DATA){$("#qbox").innerHTML=`<div class="card hint">先选单元、${API.mode==="local"?"填学生姓名点「开始」":"登录后自动开始"}。</div>`;return;}
   const rec=ADV&&ADV.length?ADV[0]:null;
@@ -1230,44 +1233,43 @@ function renderQ(){
   const hasImg=q[8]&&q[8].length, hasMs=q[9]&&q[9].length;
   const topicName=cleanTopic(tOf[q[1]]||q[1]);
   const source=sourceText(q[10]);
-  /* 题干展示按「数据质量」分流，不能一刀切。
-     背景：原实现是「有截图就只渲染图」，11216/12030 题（93%）的文本被丢弃，
-     移动端要先缩放整页 A4 才看得见题干。但全库实测 96% 的文本是 OCR 碎片
-     （上标拍平成 x2、公式被拆成逐行单字符），直接铺出来比看图更难读。
-     所以分三种情况：
-       1. 题干带 LaTeX 定界符（TMUA 为主，308/360）→ 文本为主，截图折叠；
-       2. 题干含 LaTeX 且不碎（公式已排好）→ 同上；
-       3. OCR 碎片 → 截图为主（看得清），文本折叠成辅助，避免先读一屏乱码。
+  /* 题干展示：**原卷截图为主，文字版折叠**（用户 2026-10-08 明确要求）。
 
-     判据不能只看「有没有 $」：EDXIALFP1 部分题的 $ 本身就是 OCR 噪声
-     （公式被拍平成 % $ & $ 这种孤立标点串），只看 $ 会把它们误判成
-     「有 LaTeX」而走文本主显，屏幕上就是一堆红色报错块。
-     故改为看**有效公式**：$...$ / \[...\] 里必须有真正的 LaTeX 结构
-     （反斜杠命令、上下标、运算符、^2、_1 等），纯标点/空白不算。*/
+     为什么不再让文字主显——上一轮我按「有 LaTeX 就文字主显」分流，实测后发现
+     判据太宽松。全库 12030 题的真实质量分布是：
+       A可用 5507 (45%) / B勉强 5003 (41%) / C不可用 1520 (12%)
+     即便被判为 A 级的题里也有硬伤：公式被拍平成 x2、图形标注碎片（"ag 5 5 4 O
+     a P i"）混在正文、货币符号$10 000 被当成公式定界符。学生看到的是
+     「排版错乱的文字 + 一个可点的截图」，反而两边都不好用。
+
+     所以规则简单化：**有截图就以截图为主，文字版收进折叠区**。
+     截图是原卷扫描，公式永远是正确排版，这是唯一可靠的来源。
+     仅当某题没有截图时，才退回文字主显（此时已无可比选项）。
+
+     文字版仍保留在折叠区里，方便搜索/朗读/打印，也便于日后 OCR 修好数据后
+     直接切回来。*/
   const raw=(q[5]||"").trim();
   const hasText=raw.length>0;
-  const hasTex=hasRealFormula(raw);
-  const lines=hasText?raw.split("\n").filter(x=>x.trim()):[];
-  const fragRatio=lines.length?lines.filter(x=>x.trim().length<=2).length/lines.length:0;
-  // 有真公式的题即使行数多也不算碎片（TMUA 的 cases/align 会跨很多行）
-  const shredded=hasText&&(!hasTex&&fragRatio>0.55||noiseRatio(raw)>0.5);
-  const textAsMain=hasText&&!shredded;
+  const figFirst=hasImg&&hasText;          // 有截图也有文字 → 截图主显
+  const textFirst=hasText&&!hasImg;        // 没截图 → 只能文字主显
+  const stemTxt=(cls)=>`<div class="stem ${cls}">${esc(q[5])}</div>`;
   const foldBox=(cls,label,inner)=>`<details class="${cls}"><summary>${label}</summary>${inner}</details>`;
   let stemBlock;
-  if(textAsMain){
-    stemBlock=`<div class="stem${showRaw?" raw":""}" id="stem">${esc(q[5])}</div>${optBlock(q)}`
-      +(hasImg?foldBox("figfold","查看原卷截图（核对用）",
-          figBlock(q[8],"原卷","点击图片可放大 · 以原卷截图为准")):"");
-  }else if(shredded){
-    // 碎片文本：给一个空的 #stem 保住公式渲染入口与DOM 结构，正文走截图
+  if(figFirst){
+    // 截图主显。保留一个隐藏的 #stem 占位：renderMath() 与 commit() 都按
+    // #stem 取节点，去掉会让这两处静默失效。
+    // 选项**必须留在折叠区外**：q[7] 是结构化数据（不是 OCR 碎片），
+    // 折叠起来学生就看不到、没法作答了。实测 696 道题有截图且有选项。
     stemBlock=`<div class="stem hide" id="stem"></div>`
-      +figBlock(q[8]||[],"原卷","点击图片可放大 · 以原卷截图为准")
-      +(hasImg?foldBox("txtfold","查看文字版（OCR 有缺字，以原卷图为准）",
-          `<div class="stem raw" style="display:block">${esc(q[5])}</div>${optBlock(q)}`):"");
+      +figBlock(q[8],"原卷","点击图片可放大 · 以原卷截图为准")
+      +optBlock(q)
+      +foldBox("txtfold","查看文字版题干（OCR 识别，可能有缺字与错位）",
+          stemTxt("raw"));
+  }else if(textFirst){
+    stemBlock=`<div class="stem${showRaw?" raw":""}" id="stem">${esc(q[5])}</div>`+optBlock(q);
   }else{
-    stemBlock=`<div class="stem${showRaw?" raw":""}" id="stem">${esc(q[5])}</div>${optBlock(q)}`
-      +(hasImg?foldBox("figfold","查看原卷截图（核对用）",
-          figBlock(q[8],"原卷","点击图片可放大 · 以原卷截图为准")):"");
+    stemBlock=`<div class="stem hide" id="stem"></div>`
+      +`<div class="hint">本题缺少原卷截图与文字版，请联系老师补充。</div>`;
   }
   $("#qbox").innerHTML=`
   <div class="card">
@@ -1296,7 +1298,7 @@ function renderQ(){
     <div id="msbox" class="hide"></div>
   </div>`;
   renderMath();
-  const qfigs=$("#qbox .qfigs"); if(qfigs)bindLb(qfigs,q[8],"原卷截图");
+  const qfigs=$("#qbox .qfigs"); if(qfigs){bindLb(qfigs,q[8],"原卷截图");markTallFigs(qfigs);}
   /* 客观题：点选项即自动判分并提交。
      答对 → score 1；答错 → score 0 且仍要求选错因（保留错因数据的价值）。
      自评按钮对客观题隐藏，避免"系统已判分还让人自评"的逻辑冲突。*/
@@ -1365,7 +1367,7 @@ function renderQ(){
         ${figBlock(q[9],"判分细则","")}`
       :(q[6]?`<div class="ms">${esc(q[6])}</div>`
         :`<div class="ms">该题无判分细则，请以上方原卷截图为准。</div>`)}`;
-    const mf=box.querySelector(".qfigs"); if(mf)bindLb(mf,q[9],"判分细则截图");
+    const mf=box.querySelector(".qfigs"); if(mf){bindLb(mf,q[9],"判分细则截图");markTallFigs(mf);}
     if(!hasMs||!q[6])renderMathIn(box);
   };
   $("#skip").onclick=()=>{
@@ -1513,7 +1515,7 @@ function commit(){
       box.innerHTML=`<div class="rowlbl" style="margin-top:0">判分细则</div>`
         +(hasMsImg?`<div class="msnote">官方判分细则截图 · 点击放大</div>${figBlock(fq[9],"判分细则","")}`
           :`<div class="ms">${esc(fq[6])}</div>`);
-      const mf=box.querySelector(".qfigs"); if(mf)bindLb(mf,fq[9],"判分细则截图");
+      const mf=box.querySelector(".qfigs"); if(mf){bindLb(mf,fq[9],"判分细则截图");markTallFigs(mf);}
       if(!hasMsImg)renderMathIn(box);
     };
   }
