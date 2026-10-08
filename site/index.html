@@ -59,6 +59,12 @@ max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 font-size:12.5px;padding:4px 11px;border-radius:99px;cursor:pointer;transition:.15s}
 #logout:hover{color:var(--red);border-color:rgba(240,128,118,.4)}
 #logout.hide{display:none}
+/* 「切换身份」比「退出」用得更频繁 —— 教师要看全班成绩、学生要切自己账号，
+   都要靠它回到角色选择界面，所以给它更醒目的主色。*/
+#switchMode{border:1px solid rgba(120,184,255,.35);background:rgba(120,184,255,.1);
+color:#9ec9f5;font-size:12.5px;padding:4px 11px;border-radius:99px;cursor:pointer;transition:.15s}
+#switchMode:hover{background:rgba(120,184,255,.2);color:#cfe6ff}
+#switchMode.hide{display:none}
 .tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:10px 0 0}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:0 0 auto;border:0;background:none;color:var(--tx2);font:inherit;font-size:13.5px;
@@ -347,6 +353,7 @@ transition:.25s;z-index:120;max-width:86vw;text-align:center}
     <div class="ttl">数学练习台<small>Edexcel · CIE · UKMT 自适应</small></div>
     <div class="who">
       <div class="who-chip" id="who"></div>
+      <button id="switchMode" class="hide" title="切换学生端 / 教师端">切换身份</button>
       <button id="logout" class="hide">退出</button>
     </div>
   </div>
@@ -703,7 +710,19 @@ $("#logout").onclick=async()=>{
     headers:{"Authorization":"Bearer "+API.tok}})}catch(e){}
   API.tok="";API.role=null;API.name=null;API.forceLogin=true;
   localStorage.removeItem("mathbank:token");
+  localStorage.removeItem("mathbank:localMode");   // 清离线标记，否则刷新又被拉回本地模式
   STU=null;location.reload();
+};
+
+/* 「切换身份」：随时回到登录界面重选学生端/教师端。
+   用户反馈原本只有题旁一个改名字的输入框，无法查看全班成绩（教师端）。
+   之前 boot() 只要看到 mathbank:current 就进离线模式，把登录界面整个吃掉，
+   导致教师根本进不去 —— 这个按钮是那次的直接补救。
+   离线模式（local）下切身份没有意义（无教师面板），所以直接跳登录框。*/
+$("#switchMode").onclick=()=>{
+  localStorage.removeItem("mathbank:localMode");
+  API.forceLogin=true;
+  openLogin();
 };
 
 $("#switchRole").onclick=()=>{
@@ -760,6 +779,7 @@ function onPane(p){
 /* ============ 角色进场 ============ */
 function enterRole(){
   $("#logout").classList.remove("hide");
+  $("#switchMode").classList.remove("hide");   // 随时可回登录界面换角色
   if(API.role==="teacher"){
     $("#who").innerHTML=`<span class="dot t"></span>教师`;
     tabsFor(TEACHER_PAGES);
@@ -784,6 +804,13 @@ function enterRole(){
 }
 function enterLocal(){
   API.mode="local";API.role="local";
+  /* 标记「本机选过离线模式」。boot() 用它决定刷新后是直接恢复还是弹登录界面。
+     区分它与 mathbank:current（后者任何学生练习后都存在）很关键 ——
+     否则教师退出登录后也会被当成离线练习，再也回不到角色切换界面。*/
+  localStorage.setItem("mathbank:localMode","1");
+  // 离线模式没有服务端会话，所以不显示「退出」；但仍要能回到登录界面
+  // 切到教师端（用户要查看全班成绩，只能从服务端拿）。
+  $("#switchMode").classList.remove("hide");
   tabsFor(STUDENT_PAGES);
   document.querySelector('[data-p="me"]').classList.remove("hide");
   units();
@@ -1035,9 +1062,9 @@ document.addEventListener("keydown",e=>{
   if(e.key==="-"||e.key==="_")lbZoom(1/1.4);
   if(e.key==="0"){LB.z=1;lbApplyZ()}
 });
-function figBlock(files,tag,cap){
+function figBlock(files,tag,cap,cls){
   if(!files||!files.length)return"";
-  return `<div class="qfigs">`+files.map((f,i)=>
+  return `<div class="qfigs${cls?" "+cls:""}">`+files.map((f,i)=>
     `<figure class="fig" data-lb="${i}" data-fig>
        <img src="data/${f}" loading="lazy" alt="${tag}">
        <span class="figtag">${tag}</span>
@@ -1513,18 +1540,43 @@ function commit(){
   const fq=qBy(CUR.qid);
   const hasMsImg=!!(fq&&fq[9]&&fq[9].length), hasMsTxt=!!(fq&&fq[6]&&!hasMsImg);
   if(hasMsImg||hasMsTxt){
-    $("#fbNoMs").textContent=hasMsImg?"对照答案（官方细则截图）":"对照答案";
+    $("#fbNoMs").textContent=hasMsImg?"对照答案":"对照答案";
     $("#fbNoMs").onclick=()=>{
       const box=$("#fbMs");
       if(!box.classList.contains("hide")){box.classList.add("hide");
-        $("#fbNoMs").textContent=hasMsImg?"对照答案（官方细则截图）":"对照答案";return}
+        $("#fbNoMs").textContent="对照答案";return}
       box.classList.remove("hide");
-      $("#fbNoMs").textContent="收起答案";
-      box.innerHTML=`<div class="rowlbl" style="margin-top:0">${hasMsImg?"官方判分细则":"参考答案"}</div>`
-        +(hasMsImg?`<div class="msnote">点击图片可放大 · 判分按得分点给分</div>${figBlock(fq[9],"判分细则","")}`
+      $("#fbNoMs").textContent="收起";
+      /* 对答案时必须同时看得到题 —— 只给答案的话没法判断"我哪里想错了"。
+         这里复用 renderQ 的题干渲染规则（截图主显 / 文字主显），
+         并复用同一份 lightbox 绑定，点图可放大。*/
+      const fHasImg=fq&&fq[8]&&fq[8].length, fHasTxt=fq&&String(fq[5]||"").trim().length>0;
+      let qPart="";
+      if(fHasImg&&fHasTxt){
+        qPart=`<div class="rowlbl" style="margin-top:0">原题（${fq[8].length>1?fq[8].length+" 张截图":"原卷截图"}）</div>`
+          +figBlock(fq[8],"原题","点击图片可放大","qstem")
+          +`<div class="txtfold" style="margin-top:10px"><details><summary>查看题目文字版</summary>`
+          +`<div class="stem raw" style="display:block">${esc(fq[5])}</div></details></div>`;
+      }else if(fHasImg){
+        qPart=`<div class="rowlbl" style="margin-top:0">原题（${fq[8].length>1?fq[8].length+" 张截图":"原卷截图"}）</div>`
+          +figBlock(fq[8],"原题","点击图片可放大","qstem");
+      }else if(fHasTxt){
+        qPart=`<div class="rowlbl" style="margin-top:0">原题</div>`
+          +`<div class="stem raw" style="display:block">${esc(fq[5])}</div>`;
+      }else{
+        qPart=`<div class="hint">本题没有可显示的原题材料。</div>`;
+      }
+      box.innerHTML=qPart+`<div class="sep"></div>`
+        +`<div class="rowlbl">${hasMsImg?"官方判分细则":"参考答案"}</div>`
+        +(hasMsImg?`<div class="msnote">点击图片可放大 · 判分按得分点给分</div>${figBlock(fq[9],"判分细则","","msfig")}`
           :`<div class="ms">${esc(fq[6])}</div>`);
-      const mf=box.querySelector(".qfigs"); if(mf){bindLb(mf,fq[9],"判分细则截图");markTallFigs(mf);}
-      if(!hasMsImg)renderMathIn(box);
+      /* 原题与判分细则各自成块，必须分别绑定 lightbox ——
+         querySelector 只返回第一个 .qfigs，只绑它会让另一组图片点不开放大。*/
+      const qf=box.querySelector(".qfigs.qstem");
+      if(qf){bindLb(qf,fq[8],"原题截图");markTallFigs(qf);}
+      const mf=box.querySelector(".qfigs.msfig");
+      if(mf){bindLb(mf,fq[9],"判分细则截图");markTallFigs(mf);}
+      renderMathIn(box);
       // 展开答案后主动给出订正入口：自评是学生在没答案时给的估计，
       // 对完答案才知道准不准。不让订正的话，能力分会一直带着这个偏差。
       $("#fixRow").innerHTML=`<div class="rowlbl" style="margin-top:12px">对完答案，如果自评不准可以改</div>
@@ -1821,12 +1873,14 @@ window.addEventListener("online",()=>flushQueue());
   if(!me||!me.role||API.forceLogin){
     if(API.tok&&!me){API.tok="";localStorage.removeItem("mathbank:token")}
     if(me&&!me.role&&API.tok){API.tok="";localStorage.removeItem("mathbank:token")}
-    /* 服务在线但没有 token（me={role:null}）时，若本机已存在离线身份，
+    /* 服务在线但没有 token（me={role:null}）时，若**本机离线模式**已选过，
        直接恢复它，而不是又弹登录框让学生重走一遍。
-       原实现把「没登录」和「本机离线」当成同一种情况，结果刷新页面
-       就丢轮次进度、还要重新点「离线练习」。*/
-    const hadLocal=!!localStorage.getItem("mathbank:current");
-    if((location.protocol==="file:"||!me||!API.tok)&&!API.forceLogin&&hadLocal){
+       注意判据必须是 mathbank:localMode（enterLocal() 时才写），
+       不能用 mathbank:current —— 后者在任何学生练习后都存在，
+       会把教师登录后的「退出」也吃掉，导致再也回不到登录界面、
+       无法切换教师/学生端（用户 2026-10-08 报此问题）。*/
+    const wasLocal=localStorage.getItem("mathbank:localMode")==="1";
+    if((location.protocol==="file:"||!me||!API.tok)&&!API.forceLogin&&wasLocal){
       enterLocal();// 本机离线模式（无教师面板）
       return;
     }
@@ -1835,6 +1889,9 @@ window.addEventListener("online",()=>flushQueue());
     return;
   }
   API.role=me.role;API.name=me.name;API.online=true;API.mode="server";
+  // 真的用服务端身份登录了，清掉离线标记 —— 否则下次 token 失效时
+  // 会被 boot() 拉回离线模式，教师又进不了教师端。
+  localStorage.removeItem("mathbank:localMode");
   enterRole();
 })();
 })();
