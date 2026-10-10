@@ -1,0 +1,18 @@
+.env
+.teacher_key
+.student_code
+mirror_state.json
+*.pyc
+__pycache__/
+.DS_Store
+bank.sqlite-wal
+bank.sqlite-shm
+output/
+selfcheck/
+shots/
+shot_*.png
+_repair_backup_*/
+
+# 原卷图片：因版权（本仓库为 public）与体积（2.9 GB）单独成库，
+# 独立 git 仓库位于 site/data/img/.git，说明见 docs/DATA-FORMAT.md §5
+site/data/img/
