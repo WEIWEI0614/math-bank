@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: 数据自检与语法检查
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Python 语法检查
+        run: |
+          python -m compileall -q site/serve.py scripts/
+          echo "✅ serve.py 与 scripts/ 语法通过"
+
+      - name: 题库数据自检
+        # 默认模式：结构性问题（字段数异常、qid 重复、解析失败）会让 CI 变红；
+        # 已知的数据缺陷（答案截断、知识点悬空）只警告，见 docs/KNOWN-ISSUES.md。
+        run: python scripts/check_data.py
+
+      - name: 检查受版权材料未被误提交
+        run: |
+          # 原卷图片因版权不随仓库分发，CI 里兜底拦一道
+          if find site/data -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.pdf' \) | grep -q .; then
+            echo "❌ 检测到图片/PDF 文件 —— 受版权保护的原卷材料不应提交到公开仓库"
+            find site/data -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.pdf' \) | head -20
+            exit 1
+          fi
+          echo "✅ 无受版权材料"
+
+      - name: 检查密钥文件未被提交
+        run: |
+          if [ -f .teacher_key ] || [ -f .student_code ]; then
+            echo "❌ 密钥文件不应提交到仓库"
+            exit 1
+          fi
+          echo "✅ 无密钥文件"

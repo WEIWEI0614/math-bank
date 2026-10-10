@@ -1,0 +1,44 @@
+MIT License
+
+Copyright (c) 2026 WEIWEI0614
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+DATA NOTICE
+
+This license covers the SOFTWARE (site/index.html, site/serve.py, scripts and
+documentation) only.  It does NOT cover the question-bank data.
+
+The question stems, answers and mark schemes distributed in site/data/*.js are
+derived from publicly available past examination papers.  The copyright in
+those materials belongs to the respective awarding bodies, including but not
+limited to:
+
+  - Cambridge Assessment International Education (CAIE)   — CIE 9709, CIE 9231
+  - Pearson Edexcel                                       — Edexcel IAL
+  - United Kingdom Mathematics Trust (UKMT)               — SMC, BMO
+  - Cambridge Assessment Admissions Testing               — TMUA, ESAT
+
+The data is provided for personal, non-commercial educational use only.
+No original examination paper images (scans or screenshots) are included in
+this repository.  If you redistribute or reuse this data, you are solely
+responsible for obtaining the necessary permission from the relevant awarding
+body.
