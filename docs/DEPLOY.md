@@ -40,6 +40,24 @@ chmod 600 .teacher_key .student_code
 
 优先级：**环境变量 > 密钥文件 > 内置默认值**。密钥文件已被 git 忽略。
 
+### 数据库自动构建（无需手工准备）
+
+`bank.sqlite` **不需要预先存在，也不在版本库里**。启动时如果 `question` / `topic`
+两表为空，`serve.py` 会用 `site/data/*.js` 现场重建：
+
+```
+题库自举：12030 题 / 1142 个知识点 -> ./bank.sqlite （0.3s）
+```
+
+只写这两张只读表；`student` / `attempt` 由 schema 建好并保持为空 ——
+**学生作答是唯一不可重建的数据**，不会被覆盖。
+
+好处：
+
+- fresh clone 下来直接能跑，不再依赖一个 45 MB 的二进制文件
+- 云部署（磁盘易失）重启后题库自动恢复，只是学生作答会丢
+- 仓库里不再携带测试账号数据
+
 ### 开机自启（macOS）
 
 `~/Library/LaunchAgents/com.mathbank.serve.plist`：
@@ -137,6 +155,9 @@ services:
 Render Free 计划的磁盘是**临时的**，实例休眠后 `bank.sqlite` 会被重置。
 学生作答记录会在重启后消失。
 
+题库本身不受影响 —— 启动时会自动从 `site/data/*.js` 重建（约 0.3 秒）。
+**丢的只是学生作答记录。**
+
 > 长期使用请改用付费计划并挂载持久磁盘，或者干脆用**本机部署**。
 
 **2. 数据仍在服务端，不是"云端同步"**
@@ -144,10 +165,11 @@ Render Free 计划的磁盘是**临时的**，实例休眠后 `bank.sqlite` 会�
 云模式下作答仍然写在服务端的 `bank.sqlite`。
 "数据不出本机"这条原则在云模式下**不成立** —— 你需要自行评估是否接受。
 
-**3. `requirements.txt` 里的包运行时并不需要**
+**3. `requirements.txt` 现在是空的（运行时零依赖）**
 
-`PyMuPDF` / `Pillow` / `numpy` 只给**构建脚本**用（PDF 解析与图片裁剪）。
-运行时零依赖，如果在意构建时间可以精简。
+`PyMuPDF` / `Pillow` / `numpy` 只给**构建脚本**用（PDF 解析与图片裁剪），
+现已改成注释。`buildCommand: pip install -r requirements.txt` 是幂等空操作，
+不会再拖慢构建或因为装不上大包而失败。
 
 ---
 

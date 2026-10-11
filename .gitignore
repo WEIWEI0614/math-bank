@@ -16,3 +16,10 @@ _repair_backup_*/
 # 原卷图片：因版权（本仓库为 public）与体积（2.9 GB）单独成库，
 # 独立 git 仓库位于 site/data/img/.git，说明见 docs/DATA-FORMAT.md §5
 site/data/img/
+
+# 数据库是运行期产物：serve.py 启动时若缺 question/topic 表，
+# 会自动用 site/data/*.js 重建（约 0.3s）。不进版本库 —— 里面含学生作答。
+bank.sqlite
+
+# WorkBuddy 会话数据（本地记忆与工作区状态），不进版本库
+.workbuddy/

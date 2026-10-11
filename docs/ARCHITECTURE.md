@@ -32,7 +32,10 @@
 ├── requirements.txt            仅构建脚本需要（PyMuPDF / Pillow / numpy）
 ├── Procfile                    云部署启动命令
 ├── render.yaml                 Render 部署蓝图
-└── bank.sqlite                 运行期数据库（仓库根目录，不进发布包）
+├── scripts/
+│   ├── build_site.py           bank.sqlite → site/data/*.js（构建期，需原卷图）
+│   └── check_data.py           题库数据自检（CI 用）
+└── bank.sqlite                 运行期数据库（自动生成，不进版本库、不进发布包）
 ```
 
 **为什么 `bank.sqlite` 在 `site/` 外面**：云发布只拷 `site/`，
@@ -161,8 +164,13 @@ topic(topic_id, name_cn, parent_id, level)      -- level: 'L1'=章, 'L2'=知识�
 启动流程：
 
 1. 载入密钥（环境变量 > 密钥文件 > 默认值）
-2. 检查 `bank.sqlite` 是否存在
+2. **题库自举** —— `question` / `topic` 两表为空时用 `site/data/*.js` 重建（约 0.3s）
 3. 绑定 `127.0.0.1`（云模式绑 `0.0.0.0`）
+
+> `bank.sqlite` 不在版本库里。仓库原先提交了一个 45 MB 的数据库，里面还带着
+> 13 个测试账号与 29 条测试作答 —— 既不适合进 public 仓库，也让部署依赖一个
+> 容易过期的二进制文件。现在改为启动自举，`student` / `attempt` 保持为空
+> （学生作答是唯一不可重建的数据）。
 
 请求处理顺序（`do_GET` / `do_POST`）：
 
