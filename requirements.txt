@@ -1,5 +1,11 @@
-# 线上练习服务只依赖 Python 标准库。
-# 题库构建和图片裁剪脚本在开发机使用：
-PyMuPDF
-Pillow
-numpy
+# 运行时零第三方依赖 —— site/serve.py 只用 Python 标准库。
+#
+# 下面三个是「构建脚本」才需要的（PDF 解析、图片裁剪），部署时不必安装：
+# 云平台在 buildCommand 里装它们既拖慢构建，也可能在免费实例上失败。
+#
+# 需要在本机跑 scripts/ 下的构建脚本时，手动装：
+#     pip install PyMuPDF Pillow numpy
+#
+# PyMuPDF
+# Pillow
+# numpy

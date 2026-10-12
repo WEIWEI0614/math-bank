@@ -1,14 +1,25 @@
+# Render 部署蓝图
+#
+# ⚠️ 上线前必做两件事：
+#   1. 把下面 TEACHER_KEY / STUDENT_CODE 的默认值改掉 —— 这是公开的默认值，
+#      任何人都能登录教师端看全班数据。建议在 Render 面板里设为 secret 并
+#      从本文件移除 value（只留 sync: false 的手工配置项）。
+#   2. 清楚一件事：free 计划的磁盘是临时的，实例休眠/重启后 bank.sqlite
+#      会被重置，学生作答会丢。题库表会在启动时自动从 site/data/*.js 重建
+#      （约 0.3 秒），所以功能不受影响，但**学生作答记录不会保留**。
+#      要长期留存请用付费计划挂持久盘，或干脆跑在本机。
 services:
   - type: web
     name: math-bank
     runtime: python
     plan: free
     rootDir: .
+    # requirements.txt 现在只有注释（运行时零依赖），这里是幂等空操作
     buildCommand: pip install -r requirements.txt
     startCommand: python site/serve.py --port ${PORT}
     healthCheckPath: /
     envVars:
       - key: TEACHER_KEY
-        value: shuxue2026
+        value: shuxue2026        # ⚠️ 上线前改掉
       - key: STUDENT_CODE
-        value: banji2026
+        value: banji2026         # ⚠️ 上线前改掉

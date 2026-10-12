@@ -10,14 +10,16 @@ DB=/app/bank.sqlite
 GZ=/app/bank.sqlite.gz
 
 if [ ! -f "$DB" ]; then
-  echo "[entrypoint] 题库不存在，下载: $BANK_URL"
-  curl -fsSL --retry 3 --retry-delay 2 -o "$GZ" "$BANK_URL" || {
-    echo "[entrypoint] 题库下载失败：检查 BANK_URL 与 release 是否存在" >&2
-    exit 1
-  }
-  # fetch-bank-release.sh 上传的是 gz（56MB → ~15MB，启动快）
-  gunzip -c "$GZ" > "$DB"
-  echo "[entrypoint] 题库就绪: $(du -h "$DB" | cut -f1)"
+  echo "[entrypoint] 题库不存在，尝试下载: $BANK_URL"
+  if curl -fsSL --retry 3 --retry-delay 2 -o "$GZ" "$BANK_URL" 2>/dev/null && [ -s "$GZ" ]; then
+    gunzip -c "$GZ" > "$DB"
+    echo "[entrypoint] 题库就绪: $(du -h "$DB" | cut -f1)"
+  else
+    # 下载失败不致命：serve.py 的 ensure_db 会从镜像内的 site/data/*.js
+    # 自举题库表（约 0.3s），服务照常起。损失的只是容器内的历史 attempt
+    # （那本来就会随重部署丢失，靠教师机每日拉回兜底）。
+    echo "[entrypoint] 题库下载失败，降级为自举模式（无历史作答）" >&2
+  fi
 else
   echo "[entrypoint] 复用容器内题库: $(du -h "$DB" | cut -f1)"
 fi

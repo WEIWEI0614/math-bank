@@ -111,6 +111,87 @@ def db():
     con.executescript(SCHEMA)
     return con
 
+# ---------- 题库表自举（question / topic）----------
+# 仓库原先直接提交一个 45 MB 的 bank.sqlite，里面还带着 13 个测试账号与
+# 29 条测试作答（"自检机器人" / "张三" / "演示学生"）—— 既不适合进 public
+# 仓库，也让部署依赖一个容易过期的二进制文件。现在改为首次启动时用
+# site/data/*.js 现场构建，student / attempt 表保持为空。
+BOOT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS topic (
+  topic_id TEXT PRIMARY KEY, level TEXT, parent_id TEXT, name_cn TEXT);
+CREATE TABLE IF NOT EXISTS question (
+  qid TEXT PRIMARY KEY, unit TEXT, topic_id TEXT, stem_md TEXT, ms_md TEXT,
+  answer_key TEXT, marks REAL, difficulty_p REAL, figs TEXT);
+CREATE INDEX IF NOT EXISTS idx_q_topic2 ON question(topic_id);
+CREATE INDEX IF NOT EXISTS idx_q_unit2  ON question(unit, topic_id);
+"""
+
+
+def _unit_js_payload(path):
+    """site/data/<UNIT>.js 形如 window.UNIT_DATA["X"]={...}; 取出 JSON 主体。"""
+    s = open(path, encoding="utf-8").read()
+    marker = ";window.UNIT_DATA["
+    i = s.find(marker)
+    if i < 0:
+        return None
+    eq = s.index("=", i + len(marker))
+    return json.JSONDecoder().raw_decode(s[eq + 1:].lstrip())[0]
+
+
+def bootstrap_from_data(con):
+    """从 site/data/*.js 重建 question / topic 两表。
+
+    只写这两张只读表，student / attempt 不动 —— 学生作答是唯一不可重建的数据。
+    """
+    con.executescript(BOOT_SCHEMA)
+    data_dir = os.path.join(ROOT, "data")
+    files = sorted(f for f in os.listdir(data_dir)
+                   if f.endswith(".js") and f != "index.js")
+    nq = nt = 0
+    for fn in files:
+        code = fn[:-3]
+        try:
+            d = _unit_js_payload(os.path.join(data_dir, fn))
+        except Exception:
+            continue                      # 单个单元坏了不能拖垮整个启动
+        if not d:
+            continue
+        for c in d.get("chapters") or []:
+            con.execute("INSERT OR REPLACE INTO topic VALUES (?,?,?,?)",
+                        (c.get("id"), "L1", None, c.get("name") or c.get("id")))
+        for t in d.get("topics") or []:
+            con.execute("INSERT OR REPLACE INTO topic VALUES (?,?,?,?)",
+                        (t.get("id"), "L2", t.get("parent"),
+                         t.get("name") or t.get("id")))
+            nt += 1
+        for q in d.get("questions") or []:
+            if len(q) < 11:
+                continue
+            # figs 存成 [{"file": ...}] 而不是裸文件名数组 —— 原库与
+            # _imgs() 都按 dict 形态读，写裸字符串会让出卷接口 500。
+            con.execute("INSERT OR REPLACE INTO question VALUES (?,?,?,?,?,?,?,?,?)",
+                        (q[0], code, q[1], q[5] or "", q[6] or "", "",
+                         q[2] or 0, q[3] if q[3] is not None else 0.5,
+                         json.dumps([{"file": f} for f in (q[8] or [])],
+                                    ensure_ascii=False)))
+            nq += 1
+    con.commit()
+    return nq, nt
+
+
+def ensure_db():
+    """缺题库表就自举；已有数据则跳过。启动时调用一次。"""
+    con = db()
+    try:
+        n = con.execute("SELECT count(*) FROM question").fetchone()[0]
+    except sqlite3.OperationalError:
+        n = 0
+    if n <= 0:
+        t0 = time.time()
+        nq, nt = bootstrap_from_data(con)
+        print(f"题库自举：{nq} 题 / {nt} 个知识点 -> {DB} （{time.time()-t0:.1f}s）")
+    con.close()
+
 # ---------- 登录口令与会话（v2 角色隔离）----------
 def _load_secret(path, env, default):
     """口令来源优先级：环境变量 > 本地密钥文件 > 首次生成的默认值。
@@ -581,7 +662,8 @@ class H(SimpleHTTPRequestHandler):
                     return []
                 out = []
                 for a in arr:
-                    f = a.get("file", "")
+                    # 兼容两种形态：原库存 [{"file":...}]，也有地方直接存文件名
+                    f = a.get("file", "") if isinstance(a, dict) else (a or "")
                     if f and "ms" not in f.lower() and "answer" not in f.lower():
                         out.append(f)
                 return out
@@ -755,8 +837,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8770)
     a = ap.parse_args()
-    if not os.path.exists(DB):
-        sys.exit(f"缺 {DB}，先跑 migrate.py / remap.py")
+    ensure_db()          # 题库表缺失时从 site/data/*.js 现场构建
     port = int(os.environ.get("PORT") or a.port)
     host = BIND_HOST
     srv = ThreadingHTTPServer((host, port), H)
