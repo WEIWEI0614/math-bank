@@ -1,0 +1,54 @@
+# 构建上下文瘦身：仓库 .git 历史约 942MB（早期提交过的大文件已删但历史在），
+# .dockerignore 决定哪些内容真正传给 Docker daemon。镜像只需要 site/。
+# 注意：不排除 bank.sqlite 本体之外的 sqlite 变体（wal/shm/bak-*）
+bank.sqlite-wal
+bank.sqlite-shm
+bank.sqlite.bak-*
+*.bak*
+
+# git 与本地开发残留
+.git
+.gitignore
+.DS_Store
+__pycache__/
+*.pyc
+.playwright-cli/
+.agents/
+.workbuddy/
+.student_code
+.teacher_key
+
+# 导题管线脚本与中间产物（_*.py/_*.json/_*.js 全在仓库根，几百个）
+_*.py
+_*.json
+_*.js
+_*.sh
+_*.bak*
+coverage_gaps.csv
+coverage_report.md
+dirty_report.csv
+part_parse_report.csv
+merge_candidates.csv
+merge_verdict.csv
+taxonomy_*.csv
+syllabus_*.csv
+threshold_sweep.csv
+difficulty_report.md
+engine_ab.md
+engine_report.md
+syllabus_outline.md
+taxonomy_review.md
+*.log
+
+# 中间/历史目录
+publish/
+publish_img_v1/
+output/
+adapted/
+shots/
+selfcheck/
+tmp/
+site/data/img/
+
+# 文档（镜像不需要）
+*.md

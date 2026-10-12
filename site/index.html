@@ -1075,11 +1075,20 @@ document.addEventListener("keydown",e=>{
   if(e.key==="-"||e.key==="_")lbZoom(1/1.4);
   if(e.key==="0"){LB.z=1;lbApplyZ()}
 });
+/* 原卷图基址。本地（file:// / 127.0.0.1 / 局域网 IP）用 data/ 相对路径；
+   云端部署（Koyeb）时原卷图 5.5GB 放不进容器也不进 git，由独立 public 仓库
+   math-bank-img 经 jsDelivr serve。与 serve.py 的 IMG_CDN_BASE 保持一致。 */
+const IMG_BASE=(()=>{
+  const h=location.hostname;
+  if(!h||h==="127.0.0.1"||h==="localhost"||h.startsWith("192.168.")||h.startsWith("10.")||h.startsWith("172.16."))
+    return "data/";
+  return "https://cdn.jsdelivr.net/gh/WEIWEI0614/math-bank-img@main/";
+})();
 function figBlock(files,tag,cap,cls){
   if(!files||!files.length)return"";
   return `<div class="qfigs${cls?" "+cls:""}">`+files.map((f,i)=>
     `<figure class="fig" data-lb="${i}" data-fig>
-       <img src="data/${f}" loading="lazy" alt="${tag}">
+       <img src="${IMG_BASE}${f}" loading="lazy" alt="${tag}">
        <span class="figtag">${tag}</span>
      </figure>`).join("")+
     (cap?`<div class="figcap">${cap}</div>`:"")+`</div>`;
@@ -1446,27 +1455,147 @@ function renderQ(){
 const MATH_DELIMS=[{left:"$$",right:"$$",display:true},{left:"\\[",right:"\\]",display:true},
                   {left:"\\(",right:"\\)",display:false},{left:"$",right:"$",display:false}];
 
-/* 货币符号消歧：题库里存在 "to the nearest $10, by 27 people" 这类美元金额，
-   KaTeX 会把 $10, by 27 people 当成公式定界符，渲染成一团乱码并吞掉英文。
-   规则：$ 后紧跟数字，且该段落内 $ 总数为奇数（说明这个 $ 没有配对）→ 判定为货币，转义成 \$。
-   真正的公式如 $8.5$、$2x^2+...$ 都是成对的，不受影响。*/
+/* 货币符号消歧（v3，2026-10-11）
+   ── 踩过的坑 ──
+   ① 旧版判据「$ 个数为奇数才转义」有致命漏洞：注释里写「成对的不动，所以 $8.5$ 安全」，
+      但最危险的恰恰是**成对的货币 $**（"prize money is $1000. ... by $1000 each day."），
+      两个 $ 配成对 -> length%2===0 -> 直接 return -> KaTeX 吞掉中间 96 个英文字符。
+   ② v2「左到右两两配对」也错：She earns $4000 and the ratio is $\frac{2}{5}$ of it.
+      贪心配对把 $4000…$ 配成一对全转义，\frac 前面的 $ 被吃掉，公式反而渲染不出来。
+   ③ 单位括号写法 ($) deviation ($) 表头：$ 之间只有 ") deviation ("，词数为 0，
+      按词数判会误判成公式。
+   ── 最终判据 ──
+   看「当前位置到下一个 $ 之间」是不是散文（>=2 个英文单词，或超长且含词）：
+     是散文 -> 当前 $ 判货币；再看下一个 $ 是否开启真公式对（其内容含 LaTeX 命令），
+              是则只吃这一个，否则两个都吃。
+     是公式 -> 整对跳过，不动。
+   另：(x) 形态的 ($) 一律判货币。
+   实测（真 KaTeX + 站点真实 data/*.js）：误当公式的片段 29 → 1，TMUA 1595 道真公式 0 误伤。
+   残余 1 例：CIE_CIE9709S1_2023s_52_Q3（茎叶图题干，$ 出现在 "in dollars" 语境里，待查）。*/
+const _MATH_WORD=/[A-Za-z]{3,}/g;
+const _MATH_CMD=/\\[a-zA-Z]+/;
+function _classifyDollarSpan(inner){
+  if(_MATH_CMD.test(inner))return "math";       // 含 LaTeX 命令 -> 必是公式
+  const w=(inner.match(_MATH_WORD)||[]).length;
+  if(inner.length>90&&w>=1)return "currency";   // 超长且夹词
+  if(w>=2)return "currency";                    // 两个以上英文单词
+  return "math";
+}
+function _isParenDollar(t,i){                   // 单位括号写法 ($)
+  return t[i-1]==="("&&t[i+1]===")";
+}
 function escapeCurrency(txt){
   if(!txt||txt.indexOf("$")<0)return txt;
-  const all=txt.match(/(?<!\\)\$/g);
-  if(!all||all.length%2===0)return txt;          // 成对 -> 交给 KaTeX
-  // 奇数：找出那个落单的 $（其后无配对 $），且其后紧跟数字/数字+逗号
-  const idx=[];
-  for(let i=0;i<txt.length;i++) if(txt[i]==="$"&&(i===0||txt[i-1]!=="\\"))idx.push(i);
-  let changed=false;
-  for(let k=0;k<idx.length;k+=2){                 // 按从左到右两两配对，末尾那个落单
-    if(k+1>=idx.length){
-      const p=idx[k], after=txt.slice(p+1);
-      if(/^\s?\d/.test(after)){                   // $10 / $ 30 000 形态
-        txt=txt.slice(0,p)+"\\$"+txt.slice(p+1); changed=true;
-      }
+  const t=txt, pos=[];
+  for(let i=0;i<t.length;i++) if(t[i]==="$"&&(i===0||t[i-1]!=="\\"))pos.push(i);
+  if(!pos.length)return t;
+  const kill=new Set();
+  let k=0;
+  while(k<pos.length){
+    if(k+1>=pos.length){                        // 落单：紧随数字 或 ($) 形态
+      const p=pos[k];
+      if(/^\s?\d/.test(t.slice(p+1))||_isParenDollar(t,p))kill.add(p);
+      k++;continue;
     }
+    const a=pos[k],b=pos[k+1];
+    const cur=_isParenDollar(t,a)||_isParenDollar(t,b)||
+              _classifyDollarSpan(t.slice(a+1,b))==="currency";
+    if(cur){
+      kill.add(a);
+      // b 可能开启了下一个真公式对（其内容含 LaTeX 命令）——是则不转义 b
+      const nextIsMath=(k+2<pos.length)&&
+        _MATH_CMD.test(t.slice(b+1,pos[k+2]));
+      if(nextIsMath){k+=1;}else{kill.add(b);k+=2;}
+    }else k+=2;                                 // 真公式：整对保留
   }
-  return changed?txt:txt;
+  if(!kill.size)return t;
+  let out="";
+  for(let i=0;i<t.length;i++)out+=(kill.has(i)?"\\$":t[i]);
+  return out;
+}
+/* 坏字体兜底（2026-10-11）
+   ── 现象 ──
+   EDXIALFP1 有 20 处 KaTeX 报错（已知问题第 2 条）。回原卷查明：
+   Edexcel 部分卷子的**分数字体没有 ToUnicode 映射**，抽出来是一串字符码。
+   原卷上是            y = 8/15 x + c ⟹ c = − 8/15 × 2 = ...
+   库里抽出来是        y = $% ! " # = − ! ! " ### ...
+   `−` `=` `⇒` `×` 正常（走 SymbolMT），坏掉的只有分数里的数字。
+   ── 判断 ──
+   文本层无法恢复（编码真的丢了），要恢复只能 OCR 或看图 ——
+   所以这里只做**渲染层兜底**：把这种噪声片段换成可见占位符，
+   而不是让它以红框报错的形式出现在老师眼前。判分细则原图本来就在旁边可点开。
+   ── 安全边界 ──
+   只吃「字符全部落在噪声/运算符集合内」**且**「至少含一个噪声字符」的 $...$ 片段；
+   # % & 在 LaTeX 数学里本就必须转义，报错是必然的，所以这个判据不会误伤真公式。*/
+const _NOISE_CHARS=/[!"#$%&@]/;
+const _NOISE_ONLY=/^[\s!"#$%&@()\[\]{}+\-=*,.;:<>|−×÷±⇒→]*$/;
+/* 判定「这段 $...$ 是坏字体码」：
+   ① 含未转义的 " # % & @ —— 这些在 LaTeX 数学模式下本来就必须转义，出现即非法；
+   ② 或者整段只由噪声/运算符构成且至少含一个噪声字符。
+   只要片段里出现反斜杠，就当作真 LaTeX 放过，避免误伤。 */
+const _BROKEN_MARK=/(?<!\\)["#%&@]/;
+const _PROSE=/[A-Za-z]{3,}/g;
+function _looksBrokenMath(inner){
+  if(/\\/.test(inner))return false;
+  if(_BROKEN_MARK.test(inner))return true;
+  // 第三种形态（恢复判分细则后新出现的）：$...$ 里包着一整段英文散文。
+  // 散文不是公式，这是数据坏了 —— 替换成占位符，别让 KaTeX 吐红框。
+  if((inner.match(_PROSE)||[]).length>=3)return true;
+  return _NOISE_CHARS.test(inner)&&_NOISE_ONLY.test(inner);
+}
+function neutralizeBrokenMath(txt){
+  if(!txt||txt.indexOf("$")<0)return txt;
+  let out=txt.replace(/(^|[^\\])\$([^$]*)\$/g,function(m,pre,inner){
+    return _looksBrokenMath(inner) ? (pre+"⟦公式见原卷⟧") : m;
+  });
+  // 兜底：上面替换会消耗掉成对的 $，如果原文 $ 是奇数个，替换后仍剩落单的 $，
+  // KaTeX 会拿它去和后面某个 $ 配对，把中间的正文整段吞掉（比红框更糟）。
+  // 所以替换完再数一次：仍是奇数 -> 定界符结构已坏，把剩下的 $ 全转义成字面量。
+  const rest=(out.match(/(?<!\\)\$/g)||[]).length;
+  if(rest%2===1)out=out.replace(/(?<!\\)\$/g,"\\$");
+  return out;
+}
+/* 噪声连续段清理（2026-10-11，第三条防线）
+   ── 为什么还需要这一道 ──
+   前两道都只处理 `$...$` 成对的情形。但实测恢复回来的判分细则里，
+   坏字体码是**裸字符**，根本没被 `$` 包着：
+       Note the exact root is 3.1426 [3.142593527]
+       ( )  !  "  #  $  %#& #'()  !  !  !  =  −  −  ...
+   关键：**这里的 `$` 本身就是噪声的一部分**。KaTeX 看到散落的 `$` 就自行配对，
+   把两枚 `$` 之间的垃圾圈成"公式"，于是报错。
+   所以必须在 `$` 配对逻辑**之前**先把这种噪声连续段整体吃掉。
+   ── 判据 ──
+   找「只由噪声字符 + 空白 + 运算符构成」的连续段，且段内
+   `!"#%&@` 这类**在任何文本里都不该成串出现**的字符达到 3 个以上 → 判为噪声。
+   普通数学式（`x = − 2`、`[3.142593527]`）不含这些字符，不会被误吃。 */
+const _RUNCH=/[\s!"#$%&@()\[\]{}+\-=*,.;:<>|−×÷±⇒→]/;
+/* ⚠️ 噪声标记只认 " # % & @ 五个字符。
+   两个踩过的坑，都别回退：
+   ① **不能含 `!`**：它是合法阶乘号，而 CIE S1/S2 是组合计数、满篇阶乘。
+      第一版把 `!` 算进标记，`7! ! !`、`6! ! ! ! !` 被判成噪声吃掉，
+      CIE9709P1/S1/S2 的替换数从 0/1/2 暴涨到 10/29/22 —— 那是误伤。
+   ② **不能含空格**：写成 `/["#%&@]/` 才对。第一版手滑写成 `/[ "#%&@]/`，
+      把空格也变成了"噪声标记"，于是 `x = 2,      y = 3` 里 6 个连续空格
+      被数成 6 个标记，整段被替换 —— TMUA 单测立刻炸出一堆
+      `1, 2, 3⟦公式见原卷⟧and n = 3` 这种把 `, . . .` 吃掉的错误。
+   这五个字符在数学文本里永远不该单独成串，才是可靠信号。 */
+const _NOISEMARK=/["#%&@]/g;
+const _NOISEFIRST=/["#%&@]/;
+function neutralizeNoiseRuns(txt){
+  if(!txt)return txt;
+  if(!_NOISEFIRST.test(txt))return txt;      // 快速退出
+  let out="",i=0,n=txt.length;
+  while(i<n){
+    if(_RUNCH.test(txt[i])){
+      let j=i;
+      while(j<n&&_RUNCH.test(txt[j]))j++;
+      const seg=txt.slice(i,j);
+      const marks=(seg.match(_NOISEMARK)||[]).length;
+      out+=(seg.length>=5&&marks>=3)?"⟦公式见原卷⟧":seg;
+      i=j;
+    }else{out+=txt[i];i++;}
+  }
+  return out;
 }
 function renderMathIn(root){
   if(!window.renderMathInElement||!root)return;
@@ -1479,8 +1608,12 @@ function preEscapeCurrency(root){
   const nodes=[]; let n;
   while((n=w.nextNode()))nodes.push(n);
   for(const nd of nodes){
-    const t=nd.nodeValue; if(!t||t.indexOf("$")<0)continue;
-    const fixed=escapeCurrency(t);
+    const t=nd.nodeValue; if(!t)continue;
+    let fixed=t;
+    if(t.indexOf("$")>=0||/[!"#%&@]/.test(t)){
+      // 顺序要紧：先吃掉裸噪声段（它会把 $ 一起吞掉），再消歧货币，最后处理成对坏片段
+      fixed=neutralizeBrokenMath(escapeCurrency(neutralizeNoiseRuns(t)));
+    }
     if(fixed!==t)nd.nodeValue=fixed;
   }
 }

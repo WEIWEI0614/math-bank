@@ -1,0 +1,17 @@
+# Caddy 反代配置。部署时把 math.example.com 换成真实域名。
+# Caddy 自动向 Let's Encrypt 申请并续期证书；80 端口仅用于跳转和证书签发。
+math.example.com {
+    encode zstd gzip
+
+    # 静态资源：data/*.js、图片、KaTeX —— 长缓存，内容变了文件名也变不了，
+    # 但题库更新靠 deploy.sh 重传，用 1 天缓存兼顾更新及时性
+    @static {
+        path /data/* /vendor/* /favicon.ico
+    }
+    header @static Cache-Control "public, max-age=86400"
+
+    # 其余全部反代到本机应用（应用只绑 127.0.0.1，不对公网暴露）
+    reverse_proxy 127.0.0.1:8770 {
+        header_up X-Real-IP {remote_host}
+    }
+}

@@ -71,21 +71,27 @@ ERR_SET  = {"concept", "procedure", "setup", "algebra", "calc", "time", "misread
 CSP = ("default-src 'self'; "
        "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
        "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
-       "img-src 'self' data:; "
+       "img-src 'self' data: https://cdn.jsdelivr.net; "
        "font-src 'self' data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
        "connect-src 'self'; object-src 'none'; base-uri 'self'; "
        "frame-ancestors 'self'")
+# 云部署（Koyeb）时图片走 jsDelivr：原卷图 5.5GB 不进 git、不进容器，
+# 由独立 public 仓库 serve。本地模式留空，仍用 data/ 相对路径。
+IMG_CDN_BASE = os.environ.get("IMG_CDN_BASE", "")
 
 _RL = {}          # ip -> deque[timestamp]
 _RL_LOCK = threading.Lock()
 
-# ---------- 云发布模式（WorkBuddy 站点）----------
+# ---------- 云发布模式（Oracle ARM VM / WorkBuddy 站点）----------
 # 平台注入 PORT 环境变量即视为云模式：绑 0.0.0.0、Host/Origin 校验
 # 从「仅本机」放宽为「同源」、限流放宽（反代共享入口 IP）。
+# BIND_HOST 可覆盖绑定地址：前面挂了 Caddy/Nginx 反代时设 127.0.0.1，
+# 让应用端口不对公网暴露（纵深防御，与防火墙规则互为双保险）。
 # 本机运行（无 PORT）时所有行为与原版完全一致。
 CLOUD = bool(os.environ.get("PORT"))
 if CLOUD:
     RL_MAX = 600                     # 反代后 client IP 共享，放宽到 600/min
+BIND_HOST = os.environ.get("BIND_HOST") or ("0.0.0.0" if CLOUD else "127.0.0.1")
 
 
 def rate_ok(ip):
@@ -502,6 +508,71 @@ class H(SimpleHTTPRequestHandler):
             import html
             KATEX = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist"
 
+            # 货币 $ 消歧（与 index.html 的 escapeCurrency 同一判据，2026-10-11 起）。
+            # 本页原先**完全没有**做货币转义 —— 练习卷里
+            # "In 2005 the school allocated $2000. ..." 这类题目会被 KaTeX 整段吞掉。
+            # 判据：一对 $ 之间出现 >=2 个英文单词 -> 货币；含 LaTeX 命令 -> 公式。
+            _CURRENCY_JS = (
+                'const _W=/[A-Za-z]{3,}/g,_C=/\\\\[a-zA-Z]+/;'
+                'function _cl(s){if(_C.test(s))return"math";'
+                'const w=(s.match(_W)||[]).length;'
+                'if(s.length>90&&w>=1)return"currency";'
+                'if(w>=2)return"currency";return"math";}'
+                'function escCur(t){if(!t||t.indexOf("$")<0)return t;'
+                'const p=[];for(let i=0;i<t.length;i++)'
+                'if(t[i]==="$"&&(i===0||t[i-1]!=="\\\\"))p.push(i);'
+                'if(!p.length)return t;const k=new Set();let j=0;'
+                # 不能用「左到右两两配对」：货币 $ 夹在公式 $ 中间时会错配
+                # （She earns $4000 and the ratio is $\\frac{2}{5}$ of it.）
+                # 只看「当前位置到下一个 $ 之间」是否散文：是 -> 只吃一个；否 -> 整对跳过
+                'while(j<p.length){'
+                'if(j+1>=p.length){'
+                'if(/^\\s?\\d/.test(t.slice(p[j]+1)))k.add(p[j]);j++;continue;}'
+                'if(_cl(t.slice(p[j]+1,p[j+1]))==="currency"){k.add(p[j]);j++;}'
+                'else j+=2;}'
+                'if(!k.size)return t;let o="";'
+                'for(let i=0;i<t.length;i++)o+=(k.has(i)?"\\\\$":t[i]);return o;}'
+                # 坏字体兜底（同 index.html 的 neutralizeBrokenMath）：
+                # Edexcel 部分卷子的分数字体没有 ToUnicode 映射，抽出来是 ! " # $ % 字符码，
+                # 被 $...$ 包着喂给 KaTeX 必报错。换成可见占位符，原图本来就在旁边。
+                # 只吃「全部落在噪声/运算符集合内」且「至少含一个噪声字符」的片段，不误伤真公式。
+                'const _NC=/[!"#$%&@]/;'
+                'const _NO=/^[\\s!"#$%&@()\\[\\]{}+\\-=*,.;:<>|−×÷±⇒→]*$/;'
+                'const _BM=/(?<![\\\\])["#%&@]/;'
+                'function lbl(s){if(/\\\\/.test(s))return false;'
+                'if(_BM.test(s))return true;'
+                'if((s.match(/[A-Za-z]{3,}/g)||[]).length>=3)return true;'
+                'return _NC.test(s)&&_NO.test(s);}'
+                'function ntr(t){if(!t||t.indexOf("$")<0)return t;'
+                'let o=t.replace(/(^|[^\\\\])\\$([^$]*)\\$/g,function(m,pre,inner){'
+                'return lbl(inner)?(pre+"⟦公式见原卷⟧"):m;});'
+                # 奇数个 $ 说明定界符结构已坏，全部转义，免得 KaTeX 吞掉正文
+                'if(((o.match(/(?<!\\\\)\\$/g)||[]).length)%2===1)'
+                'o=o.replace(/(?<!\\\\)\\$/g,"\\\\$");'
+                'return o;}'
+                # 第三条防线：裸噪声连续段。实测坏字体码常不带 $ 直接混在正文里，
+                # 关键是**这里的 $ 本身就是噪声**，KaTeX 会拿它自行配对圈住垃圾。
+                # 必须在 $ 配对逻辑之前先整段吃掉。
+                'const _RC=/[\\s!"#$%&@()\\[\\]{}+\\-=*,.;:<>|−×÷±⇒→]/;'
+                # 噪声标记不含 ! —— 它是合法阶乘号，CIE S1/S2 满篇都是
+                'const _NM=/[\\"#%&@]/g;'
+                'function runs(t){if(!t||!/[\\"#%&@]/.test(t))return t;'
+                'let o="",i=0,n=t.length;'
+                'while(i<n){if(_RC.test(t[i])){let j=i;'
+                'while(j<n&&_RC.test(t[j]))j++;'
+                'const s=t.slice(i,j);'
+                'o+=((s.length>=5&&(s.match(_NM)||[]).length>=3)?"⟦公式见原卷⟧":s);'
+                'i=j;}else{o+=t[i];i++;}}'
+                'return o;}'
+                'function preCur(r){'
+                'const w=document.createTreeWalker(r,NodeFilter.SHOW_TEXT,null),n=[];'
+                'let x;while((x=w.nextNode()))n.push(x);'
+                'for(const d of n){const v=d.nodeValue;if(!v)continue;'
+                'let f=v;'
+                'if(v.indexOf("$")>=0||/[\\"#%&@]/.test(v))f=ntr(escCur(runs(v)));'
+                'if(f!==v)d.nodeValue=f;}}'
+            )
+
             def _imgs(figs):
                 """figs 是 JSON 数组；只取 stem/full 图，判分细则图不要"""
                 try:
@@ -519,7 +590,7 @@ class H(SimpleHTTPRequestHandler):
             for i, r in enumerate(rows):
                 figs = _imgs(r[4])
                 figh = "".join(
-                    f'<div class=fig><img src="{html.escape(f)}" alt="原卷题图" loading="lazy"></div>'
+                    f'<div class=fig><img src="{html.escape(IMG_CDN_BASE + f)}" alt="原卷题图" loading="lazy"></div>'
                     for f in figs)
                 ans = (r[5] or "").strip()
                 ms = clean_paper_text(r[6] or "")
@@ -562,11 +633,14 @@ class H(SimpleHTTPRequestHandler):
                    f'<p class=m>按引擎判定的薄弱知识点抽取 · {time.strftime("%Y-%m-%d %H:%M")}</p>'
                    f'<p class=cov>实际覆盖 {len(covered)} 个知识点：{html.escape(cov_txt)}</p>'
                    f'{filter_note}{body}'
-                   '<script>window.addEventListener("load",function(){'
-                   'if(window.renderMathInElement)renderMathInElement(document.body,{delimiters:'
+                   '<script>' + _CURRENCY_JS +
+                   'window.addEventListener("load",function(){'
+                   'if(window.renderMathInElement){preCur(document.body);'
+                   'renderMathInElement(document.body,{delimiters:'
                    '[{left:"$$",right:"$$",display:true},{left:"\\\\[",right:"\\\\]",display:true},'
                    '{left:"\\\\(",right:"\\\\)",display:false},{left:"$",right:"$",display:false}],'
-                   'throwOnError:false,ignoredTags:["script","style"]});});</script>'
+                   'throwOnError:false,ignoredTags:["script","style"]});'
+                   '}});</script>'
                    '</body></html>')
             b = doc.encode()
             self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -684,10 +758,10 @@ def main():
     if not os.path.exists(DB):
         sys.exit(f"缺 {DB}，先跑 migrate.py / remap.py")
     port = int(os.environ.get("PORT") or a.port)
-    host = "0.0.0.0" if CLOUD else "127.0.0.1"
+    host = BIND_HOST
     srv = ThreadingHTTPServer((host, port), H)
     if CLOUD:
-        print(f"练习站(云模式): 0.0.0.0:{port}   数据写入 {DB}")
+        print(f"练习站(云模式): {host}:{port}   数据写入 {DB}")
     else:
         print(f"练习站: http://127.0.0.1:{port}/   （仅本机可访问，数据写入 {DB}）")
         print(f"教师口令: {TEACHER_KEY}   学生班级码: {STUDENT_CODE}"

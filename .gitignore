@@ -12,3 +12,7 @@ selfcheck/
 shots/
 shot_*.png
 _repair_backup_*/
+
+# 原卷图片：因版权（本仓库为 public）与体积（2.9 GB）单独成库，
+# 独立 git 仓库位于 site/data/img/.git，说明见 site/data/img/README.md
+site/data/img/

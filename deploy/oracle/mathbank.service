@@ -1,0 +1,31 @@
+[Unit]
+Description=Math Bank practice server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/mathbank
+
+# PORT 存在即触发 serve.py 云模式；BIND_HOST 绑 127.0.0.1，
+# 对外只暴露 Caddy 的 443，应用端口不对公网开放（纵深防御）
+Environment=PORT=8770
+Environment=BIND_HOST=127.0.0.1
+EnvironmentFile=/etc/mathbank.env
+
+ExecStart=/usr/bin/python3 /opt/mathbank/site/serve.py --port 8770
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+# 最小加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/mathbank
+
+[Install]
+WantedBy=multi-user.target
