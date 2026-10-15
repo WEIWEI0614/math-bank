@@ -1,0 +1,79 @@
+==============================================================
+① 总量与新增
+   总题数: 12565   本次新增(new_paper): 501
+   新增按考试局: [('CIE', 367), ('EDX', 134)]
+
+② 重复检查（同 unit+year+session+paper+qno 只允许 1 行）
+   重复组: 23
+     BMO 20022002 vBMO1 Q1: 2行 BMO1_2002_Q1,BMO1_2002_Q1_B
+     BMO 20022002 vBMO1 Q2: 2行 BMO1_2002_Q2,BMO1_2002_Q2_B
+     BMO 20022002 vBMO1 Q3: 2行 BMO1_2002_Q3,BMO1_2002_Q3_B
+     BMO 20022002 vBMO1 Q4: 2行 BMO1_2002_Q4,BMO1_2002_Q4_B
+     BMO 20022002 vBMO1 Q5: 2行 BMO1_2002_Q5,BMO1_2002_Q5_B
+     ESAT 20202020 vNSAA Q1: 3行 ESAT_NSAA_2020_A_Q1,ESAT_NSAA_SPEC20_A_Q1,ESAT_NSAA_SPEC20_E_Q1
+     ESAT 20202020 vNSAA Q2: 3行 ESAT_NSAA_2020_A_Q2,ESAT_NSAA_SPEC20_A_Q2,ESAT_NSAA_SPEC20_E_Q2
+     ESAT 20202020 vNSAA Q3: 3行 ESAT_NSAA_2020_A_Q3,ESAT_NSAA_SPEC20_A_Q3,ESAT_NSAA_SPEC20_E_Q3
+     ESAT 20202020 vNSAA Q4: 3行 ESAT_NSAA_2020_A_Q4,ESAT_NSAA_SPEC20_A_Q4,ESAT_NSAA_SPEC20_E_Q4
+     ESAT 20202020 vNSAA Q5: 3行 ESAT_NSAA_2020_A_Q5,ESAT_NSAA_SPEC20_A_Q5,ESAT_NSAA_SPEC20_E_Q5
+
+③ 新增题的场次覆盖（应有题且题量合理）
+   CIE9231FM      2025s   17题 (Q2-7) 
+   CIE9231FM      2025w   19题 (Q1-7) 
+   CIE9231FP1     2025s   21题 (Q1-7) 
+   CIE9231FP1     2025w   18题 (Q1-7) 
+   CIE9231FP2     2025s   21题 (Q1-8) 
+   CIE9231FP2     2025w   24题 (Q1-8) 
+   CIE9231FS      2025s   15题 (Q2-6) 
+   CIE9231FS      2025w   20题 (Q1-7) 
+   CIE9709M1      2025m    7题 (Q1-7) 
+   CIE9709M1      2025w   19题 (Q1-8) 
+   CIE9709P1      2025m    8题 (Q1-11) 
+   CIE9709P1      2025w   29题 (Q1-11) 
+   CIE9709P2      2024s   16题 (Q1-7) 
+   CIE9709P2      2024w   19题 (Q1-7) 
+   CIE9709P2      2025m    8题 (Q1-8) 
+   CIE9709P2      2025w   21题 (Q1-8) 
+   CIE9709S1      2025m    5题 (Q2-6) 
+   CIE9709S1      2025w   21题 (Q1-7) 
+   CIE9709S2      2024s   18题 (Q1-7) 
+   CIE9709S2      2024w   15题 (Q1-7) 
+   CIE9709S2      2025m    6题 (Q1-6) 
+   CIE9709S2      2025w   20题 (Q1-7) 
+   EDXIALM1       2024w    7题 (Q1-7) 
+   EDXIALM1       2025w    7题 (Q1-7) 
+   EDXIALM2       2024w    7题 (Q1-7) 
+   EDXIALM2       2025w    6题 (Q2-7) 
+   EDXIALP1       2024w    9题 (Q1-9) 
+   EDXIALP1       2025w   10题 (Q1-10) 
+   EDXIALP2       2024w   11题 (Q1-11) 
+   EDXIALP2       2025w    9题 (Q1-9) 
+   EDXIALP3       2024w    9题 (Q1-9) 
+   EDXIALP3       2025w    9题 (Q1-9) 
+   EDXIALP4       2024w   10题 (Q1-10) 
+   EDXIALP4       2025w   10题 (Q1-10) 
+   EDXIALS1       2024w    8题 (Q1-8) 
+   EDXIALS1       2025w    8题 (Q1-8) 
+   EDXIALS2       2024w    7题 (Q1-7) 
+   EDXIALS2       2025w    7题 (Q1-7) 
+
+④ session_cn 回填
+   待回填: 0 行
+
+⑤ 关键场次抽查（用户点名的）
+   爱得思P1 2025年10月            10 题 ✅
+   爱得思P2 2025年10月             9 题 ✅
+   爱得思M1 2025年10月             7 题 ✅
+   爱得思S1 2025年10月             8 题 ✅
+   爱得思P1 2024年10月             9 题 ✅
+   CIE P1 2025年10-11月        29 题 ✅
+   CIE S1 2025年10-11月        21 题 ✅
+   CIE M1 2025年10-11月        19 题 ✅
+   CIE FP1 2025年10-11月       18 题 ✅
+   CIE FM 2025年5-6月          17 题 ✅
+
+⑥ 质量抽验（新增题前3条的题干首行）
+   EDX_EDXIALM1_2024w_01_Q1: 1. Particle A has mass 4m and particle B has mass 3m.
+   EDX_EDXIALM1_2024w_01_Q2: 2.
+   EDX_EDXIALM1_2024w_01_Q3: 3. [In this question i and j are horizontal unit vectors and position 
+
+验收完成

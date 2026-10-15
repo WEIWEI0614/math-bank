@@ -23,26 +23,52 @@ brew install cloudflared          # 或 https://github.com/cloudflare/cloudflare
 脚本会起 serve.py 并打印一个 `https://xxx-yyy-zzz.trycloudflare.com` 地址，
 发给学生就能用。**Quick Tunnel 的域名每次重启都会变**，只适合测试。
 
-## 生产模式（固定域名，5 分钟）
+## 生产模式（固定域名，一条龙 5 分钟）
 
-1. 注册 Cloudflare 账号（免费，邮箱即可，**这就是唯一的"注册"**）
-2. 把域名 NS 交给 Cloudflare（或只加一个 CNAME 记录用 partial 接入）
-3. `cloudflared tunnel login` → 按提示选域名
-4. 编辑 `config.yml`，把 `math.example.com` 换成你的域名：
-   ```yaml
-   tunnel: <TunnelID>
-   credentials-file: <登录后生成的.json路径>
-   ingress:
-     - hostname: math.example.com
-       service: http://127.0.0.1:8770
-     - service: http_status:404
-   ```
-5. `cloudflared tunnel route dns <Tunnel名> math.example.com`
-6. `cloudflared tunnel run <Tunnel名>` 跑起来；要开机自启就装 plist：
-   ```bash
-   cp deploy/tunnel/com.mathbank.plist ~/Library/LaunchAgents/
-   launchctl load ~/Library/LaunchAgents/com.mathbank.plist
-   ```
+需要两样东西。**域名可以免费**（见下方路 B），CF 账号免费计划即可：
+
+1. **Cloudflare 账号**（免费计划，无需信用卡）：
+   https://dash.cloudflare.com/sign-up
+2. **域名**，两条路任选：
+
+### 路 A：花钱买（$9.77/年，最省心）
+
+CF 面板 → Registrar → Register Domain → `.com` 约 **$9.77/年**（成本价，
+比 Namesilo/GoDaddy 便宜，且 DNS、隧道、证书全在一个面板）。
+域名自动托管在 CF，脚本全自动配好，零手动。
+
+### 路 B：免费域名（0 元，手动加一条 CNAME）
+
+Named Tunnel 只要求「能加 CNAME 到 `<隧道ID>.cfargotunnel.com`」，
+**不要求域名在 Cloudflare**。免费选项按靠谱程度：
+
+| 服务 | 地址形态 | 拿法 | CNAME | 评价 |
+|---|---|---|---|---|
+| **afraid.org FreeDNS** | `xxx.干净域段` | 邮箱注册即得 | ✅ 面板直接加 | **首选**，老牌记录全，避开被滥用的域段 |
+| **is-a.dev** | `xxx.is-a.dev` | GitHub 提 PR 加 CNAME 文件，审核数小时 | ✅（PR 即 CNAME） | 开发者圈正规，有 GitHub 就合适 |
+| **eu.org** | `xxx.eu.org` | 官网申请，人工审核几天~几周 | ✅ | 经典但太慢，应急不选 |
+| DuckDNS | `xxx.duckdns.org` | 即时 | ❌ **只有动态 A 记录** | **配不了隧道**，常被误荐 |
+
+脚本对免费域名自动降级：`route dns` 失败时打印精确的手动 CNAME 步骤
+（含你的隧道 ID），照着加完回车，后面全自动。
+
+然后跑一条龙脚本：
+
+```bash
+./deploy/tunnel/named-setup.sh
+# 交互问一句完整域名（如 math.example.com），然后自动完成：
+#   浏览器授权 → 建隧道 → 写 config.yml → 配 DNS CNAME →
+#   装 launchd（开机自启+崩溃自拉）→ 验证 + 打印固定地址
+```
+
+配好后：
+
+- 地址永久不变：`https://math.你的域名.com`
+- 教师机重启自动恢复，不用再手动跑任何东西
+- 停服：`launchctl unload ~/Library/LaunchAgents/com.mathbank.tunnel.plist`
+- 日志：`deploy/tunnel/tunnel.log`
+
+### 手动模式（脚本失败时的手工步骤）
 
 ## 验收
 

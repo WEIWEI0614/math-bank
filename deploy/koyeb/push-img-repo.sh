@@ -38,6 +38,9 @@ git -c user.email="$OWNER@users.noreply.github.com" -c user.name="$OWNER" commit
 git remote add origin "https://github.com/$OWNER/$REPO.git"
 
 echo "==> 推送（约 3GB，家庭宽带约 15-40 分钟，断线就重跑本脚本，幂等）"
+# GitHub 对大 push 有 HTTP/2 framing bug，强制 HTTP/1.1 + 大缓冲区是标准解法
+git config http.version HTTP/1.1
+git config http.postBuffer 524288000
 git push -u origin main --force
 
 cat <<DONE

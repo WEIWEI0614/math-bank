@@ -21,11 +21,11 @@ gzip -6 -c "$TMP/bank.sqlite" > "$TMP/bank.sqlite.gz"
 ls -lh "$TMP/bank.sqlite.gz"
 
 echo "==> 创建/更新 release: $TAG"
-# --clobber 覆盖同名 asset；tag 固定为 bank-latest 意味着容器永远拉最新版
+# 注意：--clobber 只对 gh release upload 有效；create 带上会报错。
+# create 失败（release 已存在）才走 upload --clobber 覆盖 asset。
 gh release create "$TAG" "$TMP/bank.sqlite.gz" \
   --title "题库快照 $(date +%Y-%m-%d)" \
-  --notes "Koyeb 部署用题库快照。生成时间：$(date '+%Y-%m-%d %H:%M')" \
-  --clobber 2>/dev/null || \
+  --notes "Koyeb 部署用题库快照。生成时间：$(date '+%Y-%m-%d %H:%M')" 2>/dev/null || \
 gh release upload "$TAG" "$TMP/bank.sqlite.gz" --clobber
 
 URL="https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/releases/download/$TAG/bank.sqlite.gz"
